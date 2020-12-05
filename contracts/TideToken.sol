@@ -28,7 +28,7 @@ interface ITide is IERC20 {
   function wipeout(address _recipient, uint256 _amount, address _otherToken) external;
 }
 
-contract TideToken is ERC20, Ownable {
+contract TideToken is ERC20, Ownable, DSMath {
   using SafeMath for uint256;
 
   ITideParent public parent;
@@ -44,6 +44,7 @@ contract TideToken is ERC20, Ownable {
 
   modifier onlySibling() {
     require(parent.sibling(msg.sender) == address(this), "TIDE::onlySibling: Must be sibling");
+    _;
   }
 
   modifier onlyMinter() {
@@ -51,10 +52,12 @@ contract TideToken is ERC20, Ownable {
       parent.sibling(msg.sender) == address(this) || msg.sender == owner(),
       "TIDE::onlyMinter: Must be owner or sibling to call mint"
     );
+    _;
   }
 
   modifier onlyParent() {
     require(msg.sender == address(parent), "TIDE::onlyparent: Only current parent can change parent");
+    _;
   }
 
 
@@ -72,7 +75,7 @@ contract TideToken is ERC20, Ownable {
   function transferFrom(address _sender, address _recipient, uint256 _amount) public virtual override returns (bool) {
     uint256 newAmount = _transferBurn(_sender, _amount);
     ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
-    return super.transferFrom(_sender, _recipient, _amount.sub(burnAmount));
+    return super.transferFrom(_sender, _recipient, newAmount);
   }
 
   function _transferBurn(address _sender, uint256 _amount) private returns (uint256) {
@@ -80,18 +83,20 @@ contract TideToken is ERC20, Ownable {
     if (_inPhase()) {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
-      _burn(sender, transmuteAmount);
-      ITide(parent.sibling(address(this))).mint(_sender, transmuteAmount);
+      _burn(_sender, burnAmount);
+      ITide(parent.sibling(address(this))).mint(_sender, burnAmount);
     } else {
       // percentage burned
       burnAmount = wmul(_amount, parent.burnRate());
       _burn(_sender, burnAmount);
     }
-    return burnAmount;
+    // return the new amount after burning
+    return sub(_amount, burnAmount);
   }
 
   /*
   // do we need this?
+  //   only if poseidon burns some tokens now
   function burn(address account, uint256 amount) public onlyOwner {
     _burn(account, amount);
   }

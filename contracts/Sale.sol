@@ -9,11 +9,12 @@ pragma solidity ^0.6.12;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ds-math/math.sol";
-import "./TidalToken.sol";
+import "./TideToken.sol";
 
 contract Sale is Ownable, ReentrancyGuard, DSMath {
 
-  TidalToken public token;
+  TideToken public tidal;
+  TideToken public riptide;
   address payable public treasury;
   uint public amountForSale;
   uint public ETHRaise;
@@ -39,12 +40,14 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   event Withdraw(address indexed buyer, uint amount);
 
   constructor(
-    TidalToken _token,
+    TideToken _tidal,
+    TideToken _riptide,
     uint _amountForSale,
     uint _ETHRaise,
     uint _maxSpend
   ) public {
-    token = _token;
+    tidal = _tidal;
+    riptide = _riptide;
     treasury = msg.sender;
     amountForSale = _amountForSale; // 4.2
     ETHRaise = _ETHRaise; // 12.6

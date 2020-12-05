@@ -15,7 +15,7 @@ contract Wipeout is Ownable {
 
   struct TokenDetails {
     bool active;
-    uint32 standard: // 0: ERC20, 1: ERC777, 2: ERC1155
+    uint32 standard; // 0: ERC20, 1: ERC777, 2: ERC1155
     uint32 id; // part of IERC1155
     uint64 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
     uint64 floor; // the lowest the balance can be afterwards
@@ -27,30 +27,30 @@ contract Wipeout is Ownable {
     uint64 floor;
   }
 
-  TokenInfo[] public protectors;
-
   uint64 public defaultProportion = 1e18;
   uint64 public defaultFloor = 0;
 
   constructor() public {
+    /*
     addProtector(0x00, 2, , 5 * 1e17, 0); // surfboard
     addProtector(0x00, 2, , 1e18, 2496 * 1e14); // bronze trident 0.2496 floor
     addProtector(0x00, 2, , 1e18, 2496 * 1e14); // bronze trident 0.2496 floor
     addProtector(0x00, 2, , 1e18, 4200 * 1e14); // silver trident 0.42 floor
     addProtector(0x00, 2, , 1e18, 6900 * 1e14); // gold trident 0.69 floor
+    */
   }
 
   mapping (address => AddressDetails) public protected;
   mapping (address => TokenDetails) public protectorDetails;
   TokenInfo[] public protectors;
 
-  function addProtector(address _token, uint64 _standard, uint64 _id, uint64 _proportion uint64 _floor) public onlyOwner {
+  function addProtector(address _token, uint64 _standard, uint64 _id, uint64 _proportion, uint64 _floor) public onlyOwner {
     require(protectorDetails[_token] == false, "WIPEOUT::addProtector: Token already added");
     editProtector(_token, 1, _standard, _id, _proportion, _floor);
     protector.push(_token);
   }
 
-  function editProtector(address _token, bool _active, uint64 _standard, uint64 _id, uint64 _proportion uint64 _floor) public onlyOwner {
+  function editProtector(address _token, bool _active, uint64 _standard, uint64 _id, uint64 _proportion, uint64 _floor) public onlyOwner {
     require(_token != address(0), "WIPEOUT::editProtector: zero address");
     require(_proportion < 2**64, "WIPEOUT::editProtector: _proportion too big");
     require(_floor < 2**64, "WIPEOUT::editProtector: _floor too big");
