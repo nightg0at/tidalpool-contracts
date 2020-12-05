@@ -1,0 +1,29 @@
+# Environment
+.env
+
+
+# Logs
+logs
+*.log
+
+# Directories used by tools like mocha & istanbul
+coverage
+shippable
+
+# Dependency directory
+node_modules
+
+# Generated files
+build
+dist
+
+# Temporary files
+tmp*
+cache*
+artifacts
+
+# flattened contracts for remix
+flat_*.sol
+
+# private notes
+notes.txt

@@ -1,0 +1,33 @@
+{
+  "name": "tidalpool-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nightg0at/tidalpool-contracts.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nightg0at/tidalpool-contracts/issues"
+  },
+  "homepage": "https://github.com/nightg0at/tidalpool-contracts#readme",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "ethereum-waffle": "^3.2.1",
+    "ethers": "^5.0.23",
+    "hardhat": "^2.0.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.3.0",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0"
+  }
+}
