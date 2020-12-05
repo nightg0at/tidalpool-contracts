@@ -13,7 +13,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Wipeout is Ownable {
 
-  struct TokenInfo {
+  struct TokenDetails {
     bool active;
     uint32 standard: // 0: ERC20, 1: ERC777, 2: ERC1155
     uint32 id; // part of IERC1155
@@ -21,8 +21,7 @@ contract Wipeout is Ownable {
     uint64 floor; // the lowest the balance can be afterwards
   }
 
-
-  struct AddressInfo {
+  struct AddressDetails {
     bool active;
     uint64 proportion;
     uint64 floor;
@@ -41,8 +40,8 @@ contract Wipeout is Ownable {
     addProtector(0x00, 2, , 1e18, 6900 * 1e14); // gold trident 0.69 floor
   }
 
-  mapping (address => AddressInfo) public protected;
-  mapping (address => TokenInfo) public protectorDetails;
+  mapping (address => AddressDetails) public protected;
+  mapping (address => TokenDetails) public protectorDetails;
   TokenInfo[] public protectors;
 
   function addProtector(address _token, uint64 _standard, uint64 _id, uint64 _proportion uint64 _floor) public onlyOwner {
@@ -70,23 +69,22 @@ contract Wipeout is Ownable {
     protected[_contract] = (_active, _proportion, _floor);
   }
 
-  function getWipeoutAmount(address _recipient, uint256 _incomingAmount, address _existingToken) public returns (uint256) {
-    // by default the burn amount = incoming token amount
+  function wipeoutAmount(address _recipient, uint256 _incomingAmount, address _otherToken) public returns (uint256) {
     uint256 burnAmount;
-    // check recipient against contracts
+    // check if recipient is a protected address
     if (protected[_recipient].active) {
       burnAmount = _reduce(
         _incomingAmount,
         protected[_recipient].proportion,
         protected[_recipient].floor,
-        _existingToken
+        _otherToken
       );
     } else {
 
       uint256 proportion = defaultProportion;
       uint256 floor = defaultFloor;
 
-      // check recipient for ownership of tokens
+      // check if recipient owns protective tokens
       for (uint i=0; i<protectors.length; i++) {
         bool has = false;
         if (protectors[i].standard == 1) {
@@ -112,29 +110,24 @@ contract Wipeout is Ownable {
         _incomingAmount,
         proportion,
         floor,
-        _existingToken
+        _otherToken
       );
     }
 
     return burnAmount;
   }
 
-  function _reduce(uint256 _amount, uint256 _proportion, uint _floor, address _existingToken) internal returns (uint256) {
-    uint256 burnAmount = wmul(_amount, _proportion); // eg 0.5 of incoming amount is burned from existing
-    uint256 existingBalance = IERC20(_existingToken).balanceOf(_recipient);
-
-    // if this puts the balance below zero:
-    //  adjust burnAmount to match balance
-    if (burnAmount > existingBalance) {
-      burnAmount = existingBalance;
+  function _reduce(uint256 _amount, uint256 _proportion, uint _floor, address _otherToken) internal returns (uint256) {
+    uint256 burnAmount = wmul(_amount, _proportion);
+    uint256 otherBalance = IERC20(_otherToken).balanceOf(_recipient);
+    // if resultant balance lower than zero adjust to zero
+    if (burnAmount > otherBalance) {
+      burnAmount = otherBalance;
     }
-
-    // if this would result in a balance lower than the floor:
-    //  adjust burnAmount to match floor
-    if (sub(existingBalance, burnAmount) < _floor) {
+    //if resultant balance lower than floor adjust to floor
+    if (sub(otherBalance, burnAmount) < _floor) {
       burnAmount = _floor;
     }
-
     return burnAmount;
   }
 

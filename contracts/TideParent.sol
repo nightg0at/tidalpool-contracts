@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ITide is IERC20 {
   function mint(address _to, uint256 _amount) external;
-  function setConfig(address _newConfig) external;
+  function setParent(address _newConfig) external;
   function wipeout(address recipient, uint256 amount) external;
 }
 
@@ -21,7 +21,7 @@ contract TideParent is Wipeout {
   uint256 private _burnRate = 69 * 1e17; //6.9%
   uint256 private _transmuteRate = 42 * 1e16; //0.42%
 
-  function setPoseidon(address _newPoseidon) external onlyOwner {
+  function setPoseidon(address _newPoseidon) public onlyOwner {
     if (protected[_poseidon].active) {
       protected[_poseidon] = AddressInfo(0, 0, 0);
     }
@@ -29,12 +29,12 @@ contract TideParent is Wipeout {
     protected[_poseidon] = AddressInfo(1, 5 * 1e17, 69 * 1e16);
   }
 
-  function setToken(uint256 _index, address _token) external onlyOwner {
+  function setToken(uint256 _index, address _token) public onlyOwner {
     require(_token != address(0), "TIDECONFIG::setToken: zero address");
     address[_index] = _token;
   }
 
-  function setAddresses(address _tokenA, address _tokenB, address _newPoseidon) {
+  function setAddresses(address _tokenA, address _tokenB, address _newPoseidon) external onlyOwner {
     setToken(0, _tokenA);
     setToken(1, _tokenB);
     setPoseidon(_newPoseidon);
@@ -50,9 +50,9 @@ contract TideParent is Wipeout {
     _transmuteRate = _newTransmuteRate;
   }
 
-  function setNewConfig(address _newConfig) external onlyOwner {
-    ITide(_tokenA).setConfig(_newConfig);
-    ITide(_tokenB).setConfig(_newConfig);
+  function setNewParent(address _newConfig) external onlyOwner {
+    ITide(_tokenA).setParent(_newConfig);
+    ITide(_tokenB).setParent(_newConfig);
   }
 
   function poseidon() public view returns (address) {

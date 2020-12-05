@@ -25,7 +25,7 @@ interface ITideParent {
 
 interface ITide is IERC20 {
   function mint(address _to, uint256 _amount) external;
-  function setparent(address _newparent) external;
+  function wipeout(address _recipient, uint256 _amount, address _otherToken) external;
 }
 
 contract TideToken is ERC20, Ownable {
@@ -53,25 +53,25 @@ contract TideToken is ERC20, Ownable {
     );
   }
 
-  modifier onlyparent() {
+  modifier onlyParent() {
     require(msg.sender == address(parent), "TIDE::onlyparent: Only current parent can change parent");
   }
 
 
-  function setparent(address _newparent) public onlyparent {
-    require(_newparent != address(0), "TIDE::setparent: zero address");
-    parent = _newparent;
+  function setParent(address _newParent) public onlyParent {
+    require(_newParent != address(0), "TIDE::setparent: zero address");
+    parent = _newParent;
   }
 
   function transfer(address _recipient, uint256 _amount) public virtual override returns (bool) {
     uint256 newAmount = _transferBurn(msg.sender, _amount);
-    ISibling(parent.sibling(address(this))).wipeout(_recipient, newAmount);
+    ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
     return super.transfer(_recipient, newAmount);
   }
 
   function transferFrom(address _sender, address _recipient, uint256 _amount) public virtual override returns (bool) {
     uint256 newAmount = _transferBurn(_sender, _amount);
-    ISibling(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
+    ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
     return super.transferFrom(_sender, _recipient, _amount.sub(burnAmount));
   }
 
@@ -81,7 +81,7 @@ contract TideToken is ERC20, Ownable {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
       _burn(sender, transmuteAmount);
-      ISibling(parent.sibling(address(this))).mint(_sender, transmuteAmount);
+      ITide(parent.sibling(address(this))).mint(_sender, transmuteAmount);
     } else {
       // percentage burned
       burnAmount = wmul(_amount, parent.burnRate());
@@ -101,9 +101,9 @@ contract TideToken is ERC20, Ownable {
     _mint(_to, _amount);
   }
 
-  function wipeout(address recipient, uint256 amount, address _existingToken) public onlySibling {
-    uint256 burnAmount = whitelist.getWipeoutAmount(recipient, amount, _existingToken);
-    _burn(recipient, burnAmount);
+  function wipeout(address _recipient, uint256 _amount, address _otherToken) public onlySibling {
+    uint256 burnAmount = parent.wipeoutAmount(_recipient, _amount, _otherToken);
+    _burn(_recipient, burnAmount);
   }
 
   function _inPhase() internal view {
