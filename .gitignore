@@ -25,5 +25,7 @@ artifacts
 # flattened contracts for remix
 flat_*.sol
 
+
 # private notes
+resources
 notes.txt

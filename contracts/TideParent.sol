@@ -14,6 +14,10 @@ interface ITide is IERC20 {
   function wipeout(address recipient, uint256 amount) external;
 }
 
+interface ISale {
+  function details() external view returns (uint, uint, uint, uint);
+}
+
 contract TideParent is Wipeout {
 
   address private _poseidon;

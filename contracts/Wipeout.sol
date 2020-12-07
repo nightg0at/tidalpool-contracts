@@ -42,6 +42,8 @@ contract Wipeout is Ownable {
 
   mapping (address => AddressDetails) public protected;
   mapping (address => TokenDetails) public protectorDetails;
+  mapping (address => bool) public freeSender;
+
   TokenInfo[] public protectors;
 
   function addProtector(address _token, uint64 _standard, uint64 _id, uint64 _proportion, uint64 _floor) public onlyOwner {
@@ -57,9 +59,10 @@ contract Wipeout is Ownable {
     protectorDetails[_token] = (_active, _standard, _id, _proportion, _floor);
   }
 
+
   function addProtected(address _contract, uint64 _proportion, uint64 _floor) public onlyOwner {
     require(protectorDetails[_token] == false, "WIPEOUT::addProtector: Token already added");
-    protected[_contract] = (1, _proportion, _floor);
+    editProtected(_contract, 1, _proportion, _floor);
   }
 
   function editProtected(address _contract, bool _active, uint64 _proportion, uint64 _floor) public onlyOwner {
@@ -68,6 +71,17 @@ contract Wipeout is Ownable {
     require(_floor < 2**64, "WIPEOUT::editProtector: _floor too big");
     protected[_contract] = (_active, _proportion, _floor);
   }
+
+  function addFreeSender(address _sender) public onlyOnwer {
+    require(freeSender[_sender] == false, "WIPEOUT::addProtector: Token already added");
+    editFreeSender(_sender, _active);
+  }
+
+  function editFreeSender(address _sender, bool _active) public onlyOwner {
+    require(_sender != address(0), "WIPEOUT::editFreeSender: zero address");
+    freeSender[_sender] = _active;
+  }
+
 
   function wipeoutAmount(address _recipient, uint256 _incomingAmount, address _otherToken) public returns (uint256) {
     uint256 burnAmount;

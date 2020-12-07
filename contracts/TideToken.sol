@@ -67,15 +67,23 @@ contract TideToken is ERC20, Ownable, DSMath {
   }
 
   function transfer(address _recipient, uint256 _amount) public virtual override returns (bool) {
-    uint256 newAmount = _transferBurn(msg.sender, _amount);
-    ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
-    return super.transfer(_recipient, newAmount);
+    if (parent.freeSender[msg.sender]) {
+      return super.transfer(_recipient, _amount);
+    } else {
+      uint256 newAmount = _transferBurn(msg.sender, _amount);
+      ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
+      return super.transfer(_recipient, newAmount);
+    }
   }
 
   function transferFrom(address _sender, address _recipient, uint256 _amount) public virtual override returns (bool) {
-    uint256 newAmount = _transferBurn(_sender, _amount);
-    ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
-    return super.transferFrom(_sender, _recipient, newAmount);
+    if (parent.freeSender[_sender]) {
+      return super.transferFrom(_sender, _recipient, _mount);
+    } else {
+      uint256 newAmount = _transferBurn(_sender, _amount);
+      ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
+      return super.transferFrom(_sender, _recipient, newAmount);
+    }
   }
 
   function _transferBurn(address _sender, uint256 _amount) private returns (uint256) {
