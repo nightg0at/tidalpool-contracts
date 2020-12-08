@@ -28,13 +28,15 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   IUniswapV2Router02 public router;
   IERC20 public weth;
 
+  uint public delayWarning;
+
   uint public amountForSale = 42e17; // 4.2 of tidal and riptide each
   uint public SurfRaise = 1e22; // 10k surf in total
   uint public rate = wdiv(amountForSale, SurfRaise);
   uint public maxTokens =  3e18; // 3k surf?
-
-  uint public const 99_PERCENT = 99e16; // the inverse of the 1% surf transfer fee
-
+  uint public const INVERSE_SURF_FEE_PERCENT = 99e16; // the inverse of the 1% surf transfer fee
+  uint public startBlock = 1;
+  uint public finishBlock = 2;
   /*
     0: not started
     1: started
@@ -43,8 +45,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
   */
   uint public stage = 0;
-  uint public startBlock = 1;
-  uint public finishBlock = 2;
+
 
   event BuyTokens(address indexed buyer, address indexed type, uint amount);
   event Withdraw(address indexed buyer, address indexed type, uint amount);
@@ -53,13 +54,15 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     TideToken _tidal,
     TideToken _riptide,
     IERC20 _surf,
-    IUniswapV2Router02 _router
+    IUniswapV2Router02 _router,
+    uint _delayWarning // 6500 is 1 day
   ) public {
     t[0] = TokenInfo(_tidal, 0, 0);
     t[1] = TokenInfo(_riptide, 0, 0);
     surf = _surf;
     router = _router;
     weth = IERC20(router.WETH());
+    delayWarning = _delayWarning;
   }
 
   modifier onlyStage(uint _stage) {
@@ -77,13 +80,13 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
 
   function startAt(uint _startBlock) public onlyOwner onlyStage(0) {
-    //require(_startBlock > block.number + 6500); // minimum warning ~1 day
+    require(_startBlock > block.number + delayWarning); // minimum warning ~1 day
     startBlock = _startBlock;
   }
 
 
   function finishAt(uint _finishBlock) public onlyOwner {
-    //require(_finishBlock > block.number + 6500); // minimum warning ~1 day
+    require(_finishBlock > block.number + delayWarning); // minimum warning ~1 day
     finishBlock = _finishBlock;
   }
 
@@ -271,12 +274,12 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
   function _reverseTransferFee(uint _inputAmount) internal pure returns (uint) {
-    return mul(wdiv(_inputAmount, 99_PERCENT), 100);
+    return mul(wdiv(_inputAmount, INVERSE_SURF_FEE_PERCENT), 100);
   }
 
 
   function _minusTransferFee(uint _inputAmount) internal pure returns (uint) {
-    return wmul(_inputAmount, 99_PERCENT);
+    return wmul(_inputAmount, INVERSE_SURF_FEE_PERCENT);
   }
 
 }

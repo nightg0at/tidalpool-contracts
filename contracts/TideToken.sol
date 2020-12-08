@@ -32,6 +32,7 @@ contract TideToken is ERC20, Ownable, DSMath {
   using SafeMath for uint256;
 
   ITideParent public parent;
+  ITide public sibling;
 
   constructor(
     string memory name,
@@ -56,34 +57,41 @@ contract TideToken is ERC20, Ownable, DSMath {
   }
 
   modifier onlyParent() {
-    require(msg.sender == address(parent), "TIDE::onlyparent: Only current parent can change parent");
+    require(msg.sender == address(parent), "TIDE::onlyParent: Only current parent can change parent");
     _;
   }
 
 
   function setParent(address _newParent) public onlyParent {
-    require(_newParent != address(0), "TIDE::setparent: zero address");
+    require(_newParent != address(0), "TIDE::setParent: zero address");
     parent = _newParent;
   }
 
+  function setSibling(address _newSibling) public onlyParent {
+    require(_newSibling != address(0), "TIDE::setSibling: zero address");
+    sibling = _newSibling;
+  }
+
   function transfer(address _recipient, uint256 _amount) public virtual override returns (bool) {
-    if (parent.freeSender[msg.sender]) {
-      return super.transfer(_recipient, _amount);
-    } else {
-      uint256 newAmount = _transferBurn(msg.sender, _amount);
-      ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
-      return super.transfer(_recipient, newAmount);
+    uint256 amount = _amount;
+    if (parent.willBurn(msg.sender, _recipient)) {
+      amount = _transferBurn(msg.sender, amount);
     }
+    if (parent.willWipeout(msg.sender, _recipient)) {
+      sibling.wipeout(_recipient, amount, address(this));
+    }
+    return super.transfer(_recipient, amount);
   }
 
   function transferFrom(address _sender, address _recipient, uint256 _amount) public virtual override returns (bool) {
-    if (parent.freeSender[_sender]) {
-      return super.transferFrom(_sender, _recipient, _mount);
-    } else {
-      uint256 newAmount = _transferBurn(_sender, _amount);
-      ITide(parent.sibling(address(this))).wipeout(_recipient, newAmount, address(this));
-      return super.transferFrom(_sender, _recipient, newAmount);
+    uint256 amount = _amount;
+    if (parent.willBurn(_sender, _recipient)) {
+      amount = _transferBurn(_sender, amount);
     }
+    if (parent.willWipeout(_sender, _recipient)) {
+      sibling.wipeout(_recipient, newAmount, address(this));
+    }
+    return super.transferFrom(_sender, _recipient, amount);
   }
 
   function _transferBurn(address _sender, uint256 _amount) private returns (uint256) {
@@ -92,7 +100,7 @@ contract TideToken is ERC20, Ownable, DSMath {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
       _burn(_sender, burnAmount);
-      ITide(parent.sibling(address(this))).mint(_sender, burnAmount);
+      sibling.mint(_sender, burnAmount);
     } else {
       // percentage burned
       burnAmount = wmul(_amount, parent.burnRate());
@@ -104,7 +112,7 @@ contract TideToken is ERC20, Ownable, DSMath {
 
   /*
   // do we need this?
-  //   only if poseidon burns some tokens now
+  //   only if poseidon burns some tokens for some reason
   function burn(address account, uint256 amount) public onlyOwner {
     _burn(account, amount);
   }
@@ -114,12 +122,48 @@ contract TideToken is ERC20, Ownable, DSMath {
     _mint(_to, _amount);
   }
 
-  function wipeout(address _recipient, uint256 _amount, address _otherToken) public onlySibling {
-    uint256 burnAmount = parent.wipeoutAmount(_recipient, _amount, _otherToken);
+  function wipeout(address _recipient, uint256 _amount) public onlySibling {
+    uint256 burnAmount;
+    (bool active, uint64 proportion, uint64 floor) = parent.getProtectedAddress(_recipient);
+    if (parent.isUniswapTokenPair(_recipient)) {
+      // check if recipient is a uniswap pair
+
+    } else if (active) {
+      // check if recipient is a protected address
+      burnAmount = _reduce(
+        _incomingAmount,
+        proportion,
+        floor
+      );
+    } else {
+      // check if recipient has one or more protector tokens
+      (proportion, floor) = parent.getBestProtection(_recipient);
+      burnAmount = _reduce(
+        _incomingAmount,
+        proportion,
+        floor
+      );
+    }
     _burn(_recipient, burnAmount);
+  }
+
+
+  function _reduce(uint256 _amount, uint256 _proportion, uint _floor) internal returns (uint256) {
+    uint256 burnAmount = wmul(_amount, _proportion);
+    uint256 otherBalance = sibling.balanceOf(_recipient);
+    // if resultant balance lower than zero adjust to zero
+    if (burnAmount > otherBalance) {
+      burnAmount = otherBalance;
+    }
+    //if resultant balance lower than floor adjust to floor
+    if (sub(otherBalance, burnAmount) < _floor) {
+      burnAmount = _floor;
+    }
+    return burnAmount;
   }
 
   function _inPhase() internal view {
     return IPoseidon(parent.poseidon()).getPhase() == address(this);
   }
+
 }
