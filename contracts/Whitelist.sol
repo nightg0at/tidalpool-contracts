@@ -10,25 +10,37 @@ pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import "@openzeppelin/contracts/introspection/IERC1820Registry.sol";
 import "@uniswap/v2-core/build/contracts/interfaces/IUniswapV2Pair.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Whitelist is Ownable {
 
+  // protectors can be ERC20, ERC777 or ERC1155 tokens
+  // ERC115 tokens have a different balanceOf() method, so we use the ERC1820 registry to identify the ERC1155 interface
+  IERC1820Registry private constant ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
+  bytes4 private constant ERC1155_INTERFACE_ID = 0xd9b67a26;
+
+  // used to identify if an address is likely to be a uniswap pair
+  address private constant UNISWAP_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
+
+
+  // tokens that offer the holder some kind of protection
   struct TokenDetails {
     bool active;
-    uint32 standard; // 0: ERC20, 1: ERC777, 2: ERC1155
-    uint32 id; // part of IERC1155
+    uint32 id; // for IERC1155 tokens only
     uint64 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
-    uint64 floor; // the lowest the balance can be afterwards
+    uint64 floor; // the lowest the balance can be after a wipeout event
   }
 
+  // addresses that have some kind of protection as if they are holding protective tokens
   struct AddressDetails {
     bool active;
     uint64 proportion;
     uint64 floor;
   }
 
+  // addresses that do not incur punitive burns or wipeouts as senders or receivers
   struct WhitelistDetails {
     bool active;
     bool sendBurn;
@@ -86,7 +98,7 @@ contract Whitelist is Ownable {
 
   function hasProtector(address _addr, address _protector) external view returns (bool) {
     bool has = false;
-    if (protectors[_protector].standard == 2) {
+    if (ERC1820_REGISTRY.implementsERC165Interface(_protector, ERC1155_INTERFACE_ID))
       if (IERC1155(_protector).balanceOf(_addr, protectors[_protector].id) > 0) {
         has = true;
       }
@@ -98,7 +110,7 @@ contract Whitelist is Ownable {
     return has;
   }
 
-  function getBestProtection(address _addr) external view returns (uint64, uint64) {
+  function cumulativeProtectionOf(address _addr) external view returns (uint64, uint64) {
     uint64 proportion = defaultProportion;
     uint64 floor = defaultFloor;
     for (uint i=0; i<protectors.length; i++) {
@@ -173,8 +185,12 @@ contract Whitelist is Ownable {
     );
   }
 
-  function isUniswapTokenPair(address _addr) public returns (bool) {
-
+  function _isUniswapTokenPair(address _addr) internal returns (bool) {
+    try IUniswapV2Pair(_addr).factory() returns (bool outcome) {
+      return outcome;
+    } catch {
+      return false;
+    }
   }
 
 
@@ -185,7 +201,7 @@ contract Whitelist is Ownable {
 
 
   function willWipeout(address _sender, address _recipient) public returns (bool) {
-    bool whitelisted = whitelist[_sender].sendWipeout || isUniswapTokenPair(_sender);
+    bool whitelisted = whitelist[_sender].sendWipeout || _isUniswapTokenPair(_sender);
     whitelisted = whitelisted || whitelist[_recipient].receiveWipeout);
     // returns true if everything is false
     return !whitelisted;

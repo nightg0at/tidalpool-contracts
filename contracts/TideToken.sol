@@ -8,7 +8,8 @@
 
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20Capped.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ds-math/math.sol";
 
@@ -24,22 +25,26 @@ interface ITideParent {
 }
 
 interface ITide is IERC20 {
+  function cap() external view returns (uint256);
   function mint(address _to, uint256 _amount) external;
   function wipeout(address _recipient, uint256 _amount, address _otherToken) external;
 }
 
-contract TideToken is ERC20, Ownable, DSMath {
+contract TideToken is ERC20Capped, Ownable, DSMath {
   using SafeMath for uint256;
 
   ITideParent public parent;
   ITide public sibling;
+  uint256 public constant maxSup
 
   constructor(
     string memory name,
     string memory symbol,
+    uint cap,
     ITideParent _parent
   ) public {
     ERC20(name, symbol);
+    ERC20Capped(cap);
     parent = _parent;
   }
 
@@ -137,7 +142,7 @@ contract TideToken is ERC20, Ownable, DSMath {
       );
     } else {
       // check if recipient has one or more protector tokens
-      (proportion, floor) = parent.getBestProtection(_recipient);
+      (proportion, floor) = parent.cumulativeProtectionOf(_recipient);
       burnAmount = _reduce(
         _incomingAmount,
         proportion,
