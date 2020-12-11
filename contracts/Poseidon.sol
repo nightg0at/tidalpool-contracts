@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./IStakingAdapter.sol";
-import "./ITide.sol";
+import "./restaking/interfaces/IStakingAdapter.sol";
+import "./interfaces/ITide.sol";
 
 // MasterChef is the master of Sushi. He can make Sushi and he is a fair guy.
 //

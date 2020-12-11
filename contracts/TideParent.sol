@@ -7,16 +7,9 @@
 
 pragma solidity 0.6.12;
 
+import "./interfaces/ITide.sol";
+//import "./interfaces/ISale.sol"; // unused now?
 
-interface ITide is IERC20 {
-  function mint(address _to, uint256 _amount) external;
-  function setParent(address _newConfig) external;
-  function wipeout(address recipient, uint256 amount) external;
-}
-
-interface ISale {
-  function details() external view returns (uint, uint, uint, uint);
-}
 
 contract TideParent is Wipeout {
 

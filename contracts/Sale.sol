@@ -4,21 +4,21 @@
   SPDX-License-Identifier: MIT
 */
 
-pragma solidity ^0.6.12;
+pragma solidity ^0.6.6;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-periphery/contracts/library/UniswapV2Library.sol";
+import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
 import "./ds-math/math.sol";
-import "./TideToken.sol";
+import "./interfaces/ITide.sol";
 
 contract Sale is Ownable, ReentrancyGuard, DSMath {
 
 
   struct TokenInfo {
-    TideToken token;
+    ITide token;
     uint sold;
     mapping(address => uint) balance;
     bool unlocked;
@@ -27,6 +27,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   IERC20 public surf;
   IUniswapV2Router02 public router;
   IERC20 public weth;
+  TokenInfo[2] public t;
 
   uint public delayWarning;
 
@@ -34,7 +35,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   uint public SurfRaise = 1e22; // 10k surf in total
   uint public rate = wdiv(amountForSale, SurfRaise);
   uint public maxTokens =  3e18; // 3k surf?
-  uint public const INVERSE_SURF_FEE_PERCENT = 99e16; // the inverse of the 1% surf transfer fee
+  uint public constant INVERSE_SURF_FEE_PERCENT = 99e16; // the inverse of the 1% surf transfer fee
   uint public startBlock = 1;
   uint public finishBlock = 2;
   /*
@@ -47,18 +48,18 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   uint public stage = 0;
 
 
-  event BuyTokens(address indexed buyer, address indexed type, uint amount);
-  event Withdraw(address indexed buyer, address indexed type, uint amount);
+  event BuyTokens(address indexed buyer, address indexed token, uint amount);
+  event Withdraw(address indexed buyer, address indexed token, uint amount);
 
   constructor(
-    TideToken _tidal,
-    TideToken _riptide,
+    ITide _tidal,
+    ITide _riptide,
     IERC20 _surf,
     IUniswapV2Router02 _router,
     uint _delayWarning // 6500 is 1 day
   ) public {
-    t[0] = TokenInfo(_tidal, 0, 0);
-    t[1] = TokenInfo(_riptide, 0, 0);
+    t[0] = TokenInfo(_tidal, 0, false);
+    t[1] = TokenInfo(_riptide, 0, false);
     surf = _surf;
     router = _router;
     weth = IERC20(router.WETH());
@@ -107,7 +108,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     surfPath[1] = address(surf);
 
     // get how many surf we need from uniswap
-    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(inputETH, surfPath);
+    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(msg.value, surfPath);
     uint surfAmount = _buyPrep(outputEstimate[1], _tid);
     uint deadline = block.timestamp + 5 minutes;
     uint surfBalBefore = surf.balanceOf(address(this));
@@ -125,7 +126,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
     uint surfBalAfter = surf.balanceOf(address(this));
     surfAmount = sub(surfBalAfter, surfBalBefore);
-    _buyTokens(tokenAmount, surfAmount, _tid);
+    _buyTokens(surfAmount, _tid);
   }
 
 
@@ -177,7 +178,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     // mint tokens and increment counter
     t[_tid].token.mint(address(this), tokenAmount);
     t[_tid].balance[msg.sender] = add(t[_tid].balance[msg.sender], tokenAmount);
-    t[_tid].sold = add(t[_tid].sold, tokenAmount)
+    t[_tid].sold = add(t[_tid].sold, tokenAmount);
 
     // if both have sold out then finish
     if (t[0].sold >= amountForSale && t[1].sold >= amountForSale) {
@@ -200,7 +201,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   // this can be called by anyone during stage 2 (finished)
   function finalize() public onlyStage(2) {
     uint deadline = block.timestamp + 5 minutes;
-    surf.approve(address(router), surf.balanceOf(address(this));
+    surf.approve(address(router), surf.balanceOf(address(this)));
 
     // mint and supply tidal + half surf liquidity
     t[0].token.mint(address(this), t[0].sold);
@@ -218,7 +219,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     );
 
     // mint and supply tidal + half surf liquidity
-    t[1]].token.mint(address(this), t[1].sold);
+    t[1].token.mint(address(this), t[1].sold);
     t[1].token.approve(address(router), t[1].sold);
     surfLiquidity = surf.balanceOf(address(this));
     router.addLiquidity(
@@ -246,11 +247,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     require(_newTokenOwner != address(0), "Invalid token owner");
     t[0].token.transferOwnership(_newTokenOwner);
     t[1].token.transferOwnership(_newTokenOwner);
-  }
-
-  function setTreasury(address payable _treasury) public onlyOwner {
-    require(_treasury != address(0), "Invalid treasury address");
-    treasury = _treasury;
   }
 
   function withdraw(address _buyer, uint _tid) external {

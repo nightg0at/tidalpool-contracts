@@ -12,23 +12,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20Capped.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ds-math/math.sol";
-
-interface IPoseidon {
-  function getPhase() external view returns (address);
-}
-
-interface ITideParent {
-  function poseidon() external view returns (address);
-  function burnRate() external view returns (uint256);
-  function transmuteRate() external view returns (uint256);
-  function sibling() external view returns (address);
-}
-
-interface ITide is IERC20 {
-  function cap() external view returns (uint256);
-  function mint(address _to, uint256 _amount) external;
-  function wipeout(address _recipient, uint256 _amount, address _otherToken) external;
-}
+import "./interfaces/ITide.sol";
+import "./interfaces/ITideParent.sol";
+import "./interfaces/IPoseidon.sol";
 
 contract TideToken is ERC20Capped, Ownable, DSMath {
   using SafeMath for uint256;
