@@ -19,7 +19,7 @@ import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./restaking/interfaces/IStakingAdapter.sol";
-import "./interfaces/ITide.sol";
+import "./interfaces/ITideToken.sol";
 
 // MasterChef is the master of Sushi. He can make Sushi and he is a fair guy.
 //
@@ -67,8 +67,8 @@ contract Poseidon is Ownable {
     // The SUSHI TOKEN!
     //CropsToken public sushi;
 
-    ITide public tidal;
-    ITide public riptide;
+    ITideToken public tidal;
+    ITideToken public riptide;
     // Dev address.
     address public devaddr;
     // Block number when bonus SUSHI period ends.
@@ -109,8 +109,8 @@ contract Poseidon is Ownable {
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
-        ITide _tidal,
-        ITide _riptide,
+        ITideToken _tidal,
+        ITideToken _riptide,
         address _devaddr,
         uint256 _startBlock
     ) public {
@@ -482,7 +482,7 @@ contract Poseidon is Ownable {
 
 
     // Safe tide token transfer function, just in case if rounding error causes ool to not have enough tokens of type _tideToken
-    function safeTideTransfer(address _to, uint256 _amount, ITide _tideToken) internal {
+    function safeTideTransfer(address _to, uint256 _amount, ITideToken _tideToken) internal {
         uint256 tokenBal = _tideToken.balanceOf(address(this));
         if (_amount > tokenBal) {
             _tideToken.transfer(_to, tokenBal);

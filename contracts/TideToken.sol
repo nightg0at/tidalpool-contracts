@@ -11,17 +11,17 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/token/ERC20/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ds-math/math.sol";
-import "./interfaces/ITide.sol";
-import "./interfaces/ITideParent.sol";
+import "./interfaces/ITideToken.sol";
+import "./interfaces/ITideTokenParent.sol";
 import "./interfaces/IPoseidon.sol";
 
 contract TideToken is ERC20Burnable, Ownable, DSMath {
-  ITideParent public parent;
+  ITideTokenParent public parent;
 
   constructor(
     string memory name,
     string memory symbol,
-    ITideParent _parent
+    ITideTokenParent _parent
   ) public ERC20(name, symbol)
   {  
     parent = _parent;
@@ -48,13 +48,13 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
 
   function setParent(address _newParent) public onlyParent {
     require(_newParent != address(0), "TIDE::setParent: zero address");
-    parent = ITideParent(_newParent);
+    parent = ITideTokenParent(_newParent);
   }
   
   /*
   function setSibling(address _newSibling) public onlyParent {
     require(_newSibling != address(0), "TIDE::setSibling: zero address");
-    sibling = ITide(_newSibling);
+    sibling = ITideToken(_newSibling);
   }
   */
 
@@ -64,7 +64,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       amount = _transferBurn(msg.sender, amount);
     }
     if (parent.willWipeout(msg.sender, _recipient)) {
-      ITide sibling = ITide(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling());
       sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transfer(_recipient, amount);
@@ -76,7 +76,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       amount = _transferBurn(_sender, amount);
     }
     if (parent.willWipeout(_sender, _recipient)) {
-      ITide sibling = ITide(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling());
       sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transferFrom(_sender, _recipient, amount);
@@ -88,7 +88,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
       _burn(_sender, burnAmount);
-      ITide sibling = ITide(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling());
       sibling.mint(_sender, burnAmount);
     } else {
       // percentage burned
@@ -128,7 +128,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
 
   function _reduce(address _recipient, uint256 _amount, uint256 _proportion, uint256 _floor) internal view returns (uint256) {
     uint256 burnAmount = wmul(_amount, _proportion);
-    ITide sibling = ITide(parent.sibling());
+    ITideToken sibling = ITideToken(parent.sibling());
     uint256 otherBalance = sibling.balanceOf(_recipient);
     // if resultant balance lower than zero adjust to zero
     if (burnAmount > otherBalance) {

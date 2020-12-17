@@ -8,8 +8,7 @@
 pragma solidity 0.6.12;
 
 import "./Whitelist.sol";
-import "./interfaces/ITide.sol";
-//import "./interfaces/ISale.sol"; // unused now?
+import "./interfaces/ITideTokenToken.sol";
 
 
 contract TideParent is Whitelist {
@@ -54,8 +53,8 @@ contract TideParent is Whitelist {
   }
 
   function setNewParent(address _newConfig) external onlyOwner {
-    ITide(siblings[0]).setParent(_newConfig);
-    ITide(siblings[1]).setParent(_newConfig);
+    ITideToken(siblings[0]).setParent(_newConfig);
+    ITideToken(siblings[1]).setParent(_newConfig);
   }
 
   function poseidon() public view returns (address) {

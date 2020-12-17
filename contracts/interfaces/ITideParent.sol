@@ -7,7 +7,7 @@
 
 pragma solidity 0.6.12;
 
-interface ITideParent {
+interface ITideTokenParent {
   function poseidon() external view returns (address);
   function burnRate() external view returns (uint256);
   function transmuteRate() external view returns (uint256);
