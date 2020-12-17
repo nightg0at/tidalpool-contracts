@@ -1,5 +1,17 @@
-pragma solidity 0.6.12;
+/*
+    The farming contract
 
+    MasterChef
+    + restaking rewards
+    + dual toggled token rewards
+
+    Thanks sushiswap, surf, niceee, dracula.
+
+    @nightg0at
+    SPDX-License-Identifier: MIT
+*/
+
+pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
@@ -16,7 +28,7 @@ import "./interfaces/ITide.sol";
 // distributed and the community can show to govern itself.
 //
 // Have fun reading it. Hopefully it's bug-free. God bless.
-contract MasterChef is Ownable {
+contract Poseidon is Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -81,9 +93,12 @@ contract MasterChef is Ownable {
 
     // Tide phase. The address of either tidal or riptide. Tidal to start
     address public phase;
+    uint256 public constant TIDAL_CAP = 69e18;
+    uint256 public constant TIDAL_VERTEX = 42e18;
 
     // weather
     bool stormy = false;
+    uint256 stormDivisor = 2;
 
     // weather god
     address zeus;
@@ -94,10 +109,10 @@ contract MasterChef is Ownable {
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
-        TideToken _tidal,
-        TideToken _riptide,
+        ITide _tidal,
+        ITide _riptide,
         address _devaddr,
-        uint256 _startBlock,
+        uint256 _startBlock
     ) public {
         tidal = _tidal;
         riptide = _riptide;
@@ -126,7 +141,7 @@ contract MasterChef is Ownable {
     // Add a new lp to the pool. Can only be called by the owner.
     // This is assumed to not be a restaking pool.
     // Restaking can be added later or with addWithRestaking() instead of add()
-    function add(uint256 _allocPoint, IERC20 _lpToken, bool _withUpdate) public onlyOwner {
+    function add(uint256 _allocPoint, IERC20 _lpToken, uint256 _withdrawTax, bool _withUpdate) public onlyOwner {
         require(poolIsAdded[address(_lpToken)] == false, 'add: pool already added');
         poolIsAdded[address(_lpToken)] = true;
 
@@ -138,6 +153,7 @@ contract MasterChef is Ownable {
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             allocPoint: _allocPoint,
+            withdrawTax: _withdrawTax,
             lastRewardBlock: lastRewardBlock,
             accTidalPerShare: 0,
             accRiptidePerShare: 0,
@@ -148,7 +164,7 @@ contract MasterChef is Ownable {
     }
 
     // Add a new lp to the pool that uses restaking. Can only be called by the owner.
-    function addWithRestaking(uint256 _allocPoint, bool _withUpdate, IStakingAdapter _adapter) public onlyOwner validAdapter(_adapter) {
+    function addWithRestaking(uint256 _allocPoint, uint256 _withdrawTax, bool _withUpdate, IStakingAdapter _adapter) public onlyOwner validAdapter(_adapter) {
         IERC20 _lpToken = IERC20(_adapter.lpTokenAddress());
 
         require(poolIsAdded[address(_lpToken)] == false, 'add: pool already added');
@@ -163,6 +179,7 @@ contract MasterChef is Ownable {
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             allocPoint: _allocPoint,
+            withdrawTax: _withdrawTax,
             lastRewardBlock: lastRewardBlock,
             accTidalPerShare: 0,
             accRiptidePerShare: 0,
@@ -219,11 +236,13 @@ contract MasterChef is Ownable {
         if (_withUpdate) {
             massUpdatePools();
         }
-        weather = _isStormy;
+        stormy = _isStormy;
     }
 
-    function setZeus(address _newZeus) public onlyOwner {
-        zeus = _newZeus;
+    function setWeatherConfig(address _newZeus, uint256 _newStormDivisor) public onlyOwner {
+        require(_newStormDivisor != 0, "Cannot divide by zero");
+        stormDivisor = _newStormDivisor;
+        zeus = _newZeus; // can be address(0)
     }
 
     function setRewardPerBlock(uint256 _newReward) public onlyOwner {
@@ -317,21 +336,22 @@ contract MasterChef is Ownable {
                 pendingOtherTokens = otherBalanceAfter.sub(otherBalanceBefore);
                 pool.accOtherPerShare = pool.accOtherPerShare.add(pendingOtherTokens.mul(1e12).div(lpSupply));
             }
+        }
 
         uint256 span = block.number.sub(pool.lastRewardBlock);
-        if (phase = address(tidal)) {
+        if (phase == address(tidal)) {
             uint256 tidalReward = span.mul(tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
             uint256 devTidalReward = tidalReward.div(devDivisor);
-            if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > tidal.cap()) {
+            if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > TIDAL_CAP) {
                 // we would exceed the cap
-                uint256 totalTidalReward = tidal.cap().sub(tidal.totalSupply());
+                uint256 totalTidalReward = TIDAL_CAP.sub(tidal.totalSupply());
                 // split proportionally
-                uint256 newDevTidalReward = totalTidalReward.div(devDivisor-1); // ~ reverse percentage
+                uint256 newDevTidalReward = totalTidalReward.div(devDivisor-1); // ~ reverse percentage approximation
                 uint256 newTidalReward = totalTidalReward.sub(newDevTidalReward);
                 tidal.mint(devaddr, newDevTidalReward); 
                 tidal.mint(address(this), newTidalReward);
 
-                uint256 totalRiptideReward = tidalReward.sub(maxTidalReward);
+                uint256 totalRiptideReward = tidalReward.sub(totalTidalReward);
                 uint256 newDevRiptideReward = totalRiptideReward.div(devDivisor-1);
                 uint256 newRiptideReward = totalRiptideReward.sub(newDevRiptideReward);
                 riptide.mint(devaddr, newDevRiptideReward);
@@ -495,10 +515,10 @@ contract MasterChef is Ownable {
 
     // called every pool update.
     function updatePhase() internal {
-        if (phase == address(tidal) && tidal.totalSupply() >= tidal.cap()){
+        if (phase == address(tidal) && tidal.totalSupply() >= TIDAL_CAP){
             phase = address(riptide);
         }
-        else if (phase == address(riptide) && tidal.totalSupply() < 42e18) {
+        else if (phase == address(riptide) && tidal.totalSupply() < TIDAL_VERTEX) {
             phase = address(tidal);
         }
     }

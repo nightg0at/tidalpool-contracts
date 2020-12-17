@@ -8,40 +8,33 @@
 
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20Capped.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ds-math/math.sol";
 import "./interfaces/ITide.sol";
 import "./interfaces/ITideParent.sol";
 import "./interfaces/IPoseidon.sol";
 
-contract TideToken is ERC20Capped, Ownable, DSMath {
-  using SafeMath for uint256;
-
+contract TideToken is ERC20Burnable, Ownable, DSMath {
   ITideParent public parent;
-  ITide public sibling;
-  uint256 public constant maxSup
 
   constructor(
     string memory name,
     string memory symbol,
-    uint cap,
     ITideParent _parent
-  ) public {
-    ERC20(name, symbol);
-    ERC20Capped(cap);
+  ) public ERC20(name, symbol)
+  {  
     parent = _parent;
   }
 
   modifier onlySibling() {
-    require(parent.sibling(msg.sender) == address(this), "TIDE::onlySibling: Must be sibling");
+    require(parent.sibling() == address(this), "TIDE::onlySibling: Must be sibling");
     _;
   }
 
   modifier onlyMinter() {
     require(
-      parent.sibling(msg.sender) == address(this) || msg.sender == owner(),
+      parent.sibling() == address(this) || msg.sender == owner(),
       "TIDE::onlyMinter: Must be owner or sibling to call mint"
     );
     _;
@@ -55,13 +48,15 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
 
   function setParent(address _newParent) public onlyParent {
     require(_newParent != address(0), "TIDE::setParent: zero address");
-    parent = _newParent;
+    parent = ITideParent(_newParent);
   }
-
+  
+  /*
   function setSibling(address _newSibling) public onlyParent {
     require(_newSibling != address(0), "TIDE::setSibling: zero address");
-    sibling = _newSibling;
+    sibling = ITide(_newSibling);
   }
+  */
 
   function transfer(address _recipient, uint256 _amount) public virtual override returns (bool) {
     uint256 amount = _amount;
@@ -69,6 +64,7 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
       amount = _transferBurn(msg.sender, amount);
     }
     if (parent.willWipeout(msg.sender, _recipient)) {
+      ITide sibling = ITide(parent.sibling());
       sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transfer(_recipient, amount);
@@ -80,7 +76,8 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
       amount = _transferBurn(_sender, amount);
     }
     if (parent.willWipeout(_sender, _recipient)) {
-      sibling.wipeout(_recipient, newAmount, address(this));
+      ITide sibling = ITide(parent.sibling());
+      sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transferFrom(_sender, _recipient, amount);
   }
@@ -91,6 +88,7 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
       _burn(_sender, burnAmount);
+      ITide sibling = ITide(parent.sibling());
       sibling.mint(_sender, burnAmount);
     } else {
       // percentage burned
@@ -115,32 +113,22 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
 
   function wipeout(address _recipient, uint256 _amount) public onlySibling {
     uint256 burnAmount;
-    (bool active, uint64 proportion, uint64 floor) = parent.getProtectedAddress(_recipient);
+    (bool active, uint256 proportion, uint256 floor) = parent.getProtectedAddress(_recipient);
     if (parent.isUniswapTokenPair(_recipient)) {
-      // check if recipient is a uniswap pair
-
-    } else if (active) {
-      // check if recipient is a protected address
-      burnAmount = _reduce(
-        _incomingAmount,
-        proportion,
-        floor
-      );
-    } else {
+      // apply double wipeout if uniswap pair
+      proportion = proportion*2;
+    } else if (!active) {
       // check if recipient has one or more protector tokens
       (proportion, floor) = parent.cumulativeProtectionOf(_recipient);
-      burnAmount = _reduce(
-        _incomingAmount,
-        proportion,
-        floor
-      );
     }
+    burnAmount = _reduce(_recipient, _amount, proportion, floor);
     _burn(_recipient, burnAmount);
   }
 
 
-  function _reduce(uint256 _amount, uint256 _proportion, uint _floor) internal returns (uint256) {
+  function _reduce(address _recipient, uint256 _amount, uint256 _proportion, uint256 _floor) internal view returns (uint256) {
     uint256 burnAmount = wmul(_amount, _proportion);
+    ITide sibling = ITide(parent.sibling());
     uint256 otherBalance = sibling.balanceOf(_recipient);
     // if resultant balance lower than zero adjust to zero
     if (burnAmount > otherBalance) {
@@ -153,7 +141,8 @@ contract TideToken is ERC20Capped, Ownable, DSMath {
     return burnAmount;
   }
 
-  function _inPhase() internal view {
+
+  function _inPhase() internal view returns (bool) {
     return IPoseidon(parent.poseidon()).getPhase() == address(this);
   }
 

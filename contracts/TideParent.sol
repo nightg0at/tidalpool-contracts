@@ -7,11 +7,12 @@
 
 pragma solidity 0.6.12;
 
+import "./Whitelist.sol";
 import "./interfaces/ITide.sol";
 //import "./interfaces/ISale.sol"; // unused now?
 
 
-contract TideParent is Wipeout {
+contract TideParent is Whitelist {
 
   address private _poseidon;
   address[2] public siblings;
@@ -20,21 +21,25 @@ contract TideParent is Wipeout {
   uint256 private _transmuteRate = 42 * 1e16; //0.42%
 
   function setPoseidon(address _newPoseidon) public onlyOwner {
-    if (protected[_poseidon].active) {
-      protected[_poseidon] = AddressInfo(0, 0, 0);
+    if (whitelist[_poseidon].active) {
+      setWhitelist(_poseidon, false, false, false, false, false);
     }
+    if (protectedAddress[_poseidon].active) {
+      setProtectedAddress(_poseidon, false, 0, 0);
+    }
+    setProtectedAddress(_newPoseidon, true, 5e17, 69e16); // check
+    setWhitelist(_newPoseidon, true, true, false, true, false);
     _poseidon = _newPoseidon;
-    protected[_poseidon] = AddressInfo(1, 5 * 1e17, 69 * 1e16);
   }
 
-  function setToken(uint256 _index, address _token) public onlyOwner {
+  function setSibling(uint256 _index, address _token) public onlyOwner {
     require(_token != address(0), "TIDECONFIG::setToken: zero address");
-    address[_index] = _token;
+    siblings[_index] = _token;
   }
 
-  function setAddresses(address _tokenA, address _tokenB, address _newPoseidon) external onlyOwner {
-    setToken(0, _tokenA);
-    setToken(1, _tokenB);
+  function setAddresses(address _siblingA, address _siblingB, address _newPoseidon) external onlyOwner {
+    setSibling(0, _siblingA);
+    setSibling(1, _siblingB);
     setPoseidon(_newPoseidon);
   }
 
@@ -44,13 +49,13 @@ contract TideParent is Wipeout {
   }
 
   function setTransmuteRate(uint256 _newTransmuteRate) external onlyOwner {
-    require(_newTransmuteRate <= 1e17, "TIDECONFIG:setBurnRate: 10% max");
+    require(_newTransmuteRate <= 1e17, "TIDECONFIG:setTransmuteRate: 10% max");
     _transmuteRate = _newTransmuteRate;
   }
 
   function setNewParent(address _newConfig) external onlyOwner {
-    ITide(_tokenA).setParent(_newConfig);
-    ITide(_tokenB).setParent(_newConfig);
+    ITide(siblings[0]).setParent(_newConfig);
+    ITide(siblings[1]).setParent(_newConfig);
   }
 
   function poseidon() public view returns (address) {

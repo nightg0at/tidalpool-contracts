@@ -4,21 +4,21 @@
   SPDX-License-Identifier: MIT
 */
 
-pragma solidity ^0.6.6;
+pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
+import "./libraries/UniswapV2Library.sol";
 import "./ds-math/math.sol";
-import "./interfaces/ITide.sol";
+import "./TideToken.sol";
+
 
 contract Sale is Ownable, ReentrancyGuard, DSMath {
 
-
   struct TokenInfo {
-    ITide token;
+    TideToken token;
     uint sold;
     mapping(address => uint) balance;
     bool unlocked;
@@ -27,6 +27,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   IERC20 public surf;
   IUniswapV2Router02 public router;
   IERC20 public weth;
+  address public factory;
   TokenInfo[2] public t;
 
   uint public delayWarning;
@@ -52,8 +53,8 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   event Withdraw(address indexed buyer, address indexed token, uint amount);
 
   constructor(
-    ITide _tidal,
-    ITide _riptide,
+    TideToken _tidal,
+    TideToken _riptide,
     IERC20 _surf,
     IUniswapV2Router02 _router,
     uint _delayWarning // 6500 is 1 day
@@ -63,6 +64,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     surf = _surf;
     router = _router;
     weth = IERC20(router.WETH());
+    factory = router.factory();
     delayWarning = _delayWarning;
   }
 
@@ -108,7 +110,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     surfPath[1] = address(surf);
 
     // get how many surf we need from uniswap
-    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(msg.value, surfPath);
+    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(factory, msg.value, surfPath);
     uint surfAmount = _buyPrep(outputEstimate[1], _tid);
     uint deadline = block.timestamp + 5 minutes;
     uint surfBalBefore = surf.balanceOf(address(this));
@@ -265,7 +267,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
   // convenience function for the front end
-  function details() external view returns (uint, uint, uint, uint) {
+  function details() external view returns (uint, uint, uint, uint, uint) {
     return (stage, rate, amountForSale, t[0].sold, t[1].sold);
   }
 

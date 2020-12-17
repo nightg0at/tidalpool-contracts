@@ -4,6 +4,7 @@ pragma solidity ^0.6.2;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./MaggotToken.sol";
+// SPDX-License-Identifier: UNLICENSED
 
 // SushiToken with Governance.
 contract RottenToken is ERC20("RottenToken", "ROT"), Ownable {

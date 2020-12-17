@@ -28,16 +28,16 @@ contract Whitelist is Ownable {
   // tokens that offer the holder some kind of protection
   struct TokenDetails {
     bool active;
-    uint32 id; // for IERC1155 tokens only
-    uint64 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
-    uint64 floor; // the lowest the balance can be after a wipeout event
+    uint256 id; // for IERC1155 tokens only
+    uint256 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
+    uint256 floor; // the lowest the balance can be after a wipeout event
   }
 
   // addresses that have some kind of protection as if they are holding protective tokens
   struct AddressDetails {
     bool active;
-    uint64 proportion;
-    uint64 floor;
+    uint256 proportion;
+    uint256 floor;
   }
 
   // addresses that do not incur punitive burns or wipeouts as senders or receivers
@@ -49,8 +49,8 @@ contract Whitelist is Ownable {
     bool receiveWipeout;
   }
 
-  uint64 public defaultProportion = 1e18;
-  uint64 public defaultFloor = 0;
+  uint256 public defaultProportion = 1e18;
+  uint256 public defaultFloor = 0;
 
   constructor() public {
     /*
@@ -67,39 +67,38 @@ contract Whitelist is Ownable {
   mapping (address => TokenDetails) public protectorDetails;
   mapping (address => WhitelistDetails) public whitelist;
   
+  
 
-
-  function addProtector(address _token, uint64 _standard, uint64 _id, uint64 _proportion, uint64 _floor) public onlyOwner {
-    require(protectorDetails[_token] == false, "WIPEOUT::addProtector: Token already added");
-    editProtector(_token, 1, _standard, _id, _proportion, _floor);
+  function addProtector(address _token, uint256 _id, uint256 _proportion, uint256 _floor) public onlyOwner {
+    require(protectorDetails[_token].active == false, "WIPEOUT::addProtector: Token already added");
+    editProtector(_token, true, _id, _proportion, _floor);
     protectors.push(_token);
   }
 
-  function editProtector(address _token, bool _active, uint64 _standard, uint64 _id, uint64 _proportion, uint64 _floor) public onlyOwner {
+  function editProtector(address _token, bool _active, uint256 _id, uint256 _proportion, uint256 _floor) public onlyOwner {
     require(_token != address(0), "WIPEOUT::editProtector: zero address");
     require(_proportion < 2**64, "WIPEOUT::editProtector: _proportion too big");
     require(_floor < 2**64, "WIPEOUT::editProtector: _floor too big");
-    protectorDetails[_token] = (_active, _standard, _id, _proportion, _floor);
+    protectorDetails[_token] = TokenDetails(_active, _id, _proportion, _floor);
   }
 
-  function getProtectorDetails(address _addr) external view returns (bool, uint32, uint32, uint64, uint64) {
+  function getProtectorDetails(address _addr) external view returns (bool, uint256, uint256, uint256) {
     return (
       protectorDetails[_addr].active,
-      protectorDetails[_addr].standard,
       protectorDetails[_addr].id,
       protectorDetails[_addr].proportion,
       protectorDetails[_addr].floor
     );
   }
 
-  function getProtectors() external view returns (address[]) { // can i return arrays yet?
+  function getProtectors() external view returns (address[] memory) { // can i return arrays yet?
     return protectors;
   }
 
-  function hasProtector(address _addr, address _protector) external view returns (bool) {
+  function hasProtector(address _addr, address _protector) public view returns (bool) {
     bool has = false;
-    if (ERC1820_REGISTRY.implementsERC165Interface(_protector, ERC1155_INTERFACE_ID))
-      if (IERC1155(_protector).balanceOf(_addr, protectors[_protector].id) > 0) {
+    if (ERC1820_REGISTRY.implementsERC165Interface(_protector, ERC1155_INTERFACE_ID)) {
+      if (IERC1155(_protector).balanceOf(_addr, protectorDetails[_protector].id) > 0) {
         has = true;
       }
     } else {
@@ -110,38 +109,29 @@ contract Whitelist is Ownable {
     return has;
   }
 
-  function cumulativeProtectionOf(address _addr) external view returns (uint64, uint64) {
-    uint64 proportion = defaultProportion;
-    uint64 floor = defaultFloor;
-    for (uint i=0; i<protectors.length; i++) {
-      if (hasProtector(_addr)) {
-        if (proportion > protectors[i].proportion) {
-          proportion = protectors[i].proportion;
+  function cumulativeProtectionOf(address _addr) external view returns (uint256, uint256) {
+    uint256 proportion = defaultProportion;
+    uint256 floor = defaultFloor;
+    for (uint256 i=0; i<protectors.length; i++) {
+      address protector = protectors[i];
+      if (hasProtector(_addr, protector)) {
+        if (proportion > protectorDetails[protector].proportion) {
+          proportion = protectorDetails[protector].proportion;
         }
-        if (floor < protectors[i].floor) {
-          floor = protectors[i].floor;
+        if (floor < protectorDetails[protector].floor) {
+          floor = protectorDetails[protector].floor;
         }
       }
     }
     return (proportion, floor);
   }
 
-
-  function addProtectedAddress(address _addr, uint64 _proportion, uint64 _floor) public onlyOwner {
-    require(protectedAddress[_addr] == false, "WIPEOUT::addProtector: Token already added");
-    editProtectedAddress(_addr, 1, _proportion, _floor);
+  function setProtectedAddress(address _addr, bool _active, uint256 _proportion, uint256 _floor) public onlyOwner {
+    require(_addr != address(0), "WIPEOUT::editProtector: zero address");
+    protectedAddress[_addr] = AddressDetails(_active, _proportion, _floor);
   }
 
-
-  function editProtectedAddress(address _addr, bool _active, uint64 _proportion, uint64 _floor) public onlyOwner {
-    require(_token != address(0), "WIPEOUT::editProtector: zero address");
-    require(_proportion < 2**64, "WIPEOUT::editProtector: _proportion too big");
-    require(_floor < 2**64, "WIPEOUT::editProtector: _floor too big");
-    protectedAddress[_addr] = (_active, _proportion, _floor);
-  }
-
-
-  function getProtectedAddress(address _addr) external view returns (bool, uint64, uint64) {
+  function getProtectedAddress(address _addr) external view returns (bool, uint256, uint256) {
     return (
       protectedAddress[_addr].active,
       protectedAddress[_addr].proportion,
@@ -149,20 +139,7 @@ contract Whitelist is Ownable {
     );
   }
 
-
-  function addWhitelist(
-    address _whitelisted,
-    bool _sendBurn,
-    bool _receiveBurn,
-    bool _sendWipeout,
-    bool _receiveWipeout
-  ) public onlyOwner {
-    require(whitelist[_whitelisted].active == false, "WIPEOUT::addNoBurn: Address already added and active");
-    editWhitelist(_whitelisted, true, _sendBurn, _receiveBurn, _sendWipeout, _receiveWipeout);
-  }
-
-
-  function editWhitelist(
+  function setWhitelist(
     address _whitelisted,
     bool _active,
     bool _sendBurn,
@@ -174,35 +151,34 @@ contract Whitelist is Ownable {
     whitelist[_whitelisted] = WhitelistDetails(_active, _sendBurn, _receiveBurn, _sendWipeout, _receiveWipeout);
   }
 
-
   function getWhitelist(address _addr) external view returns (bool, bool, bool, bool, bool) {
     return (
       whitelist[_addr].active,
       whitelist[_addr].sendBurn,
       whitelist[_addr].receiveBurn,
       whitelist[_addr].sendWipeout,
-      whitelist[_addr].receiveWipeout,
+      whitelist[_addr].receiveWipeout
     );
   }
 
-  function _isUniswapTokenPair(address _addr) internal returns (bool) {
-    try IUniswapV2Pair(_addr).factory() returns (bool outcome) {
-      return outcome;
+  function isUniswapTokenPair(address _addr) public view returns (bool) {
+    try IUniswapV2Pair(_addr).factory() returns (address _factory) {
+      return _factory == UNISWAP_FACTORY ? true : false;
     } catch {
       return false;
     }
   }
 
 
-  function willBurn(address _sender, address _recipient) public returns (bool) {
+  function willBurn(address _sender, address _recipient) public view returns (bool) {
     // returns true if everything is false
     return !(whitelist[_sender].sendBurn || whitelist[_recipient].receiveBurn);
   }
 
 
-  function willWipeout(address _sender, address _recipient) public returns (bool) {
-    bool whitelisted = whitelist[_sender].sendWipeout || _isUniswapTokenPair(_sender);
-    whitelisted = whitelisted || whitelist[_recipient].receiveWipeout);
+  function willWipeout(address _sender, address _recipient) public view returns (bool) {
+    bool whitelisted = whitelist[_sender].sendWipeout || isUniswapTokenPair(_sender);
+    whitelisted = whitelisted || whitelist[_recipient].receiveWipeout;
     // returns true if everything is false
     return !whitelisted;
   }
