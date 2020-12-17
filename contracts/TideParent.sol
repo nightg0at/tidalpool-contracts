@@ -8,7 +8,7 @@
 pragma solidity 0.6.12;
 
 import "./Whitelist.sol";
-import "./interfaces/ITideTokenToken.sol";
+import "./interfaces/ITideToken.sol";
 
 
 contract TideParent is Whitelist {
