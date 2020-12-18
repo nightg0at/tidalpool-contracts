@@ -7,11 +7,11 @@
 
 pragma solidity 0.6.12;
 
-interface ITideTokenParent {
+interface ITideParent {
   function poseidon() external view returns (address);
   function burnRate() external view returns (uint256);
   function transmuteRate() external view returns (uint256);
-  function sibling() external view returns (address);
+  function sibling(address _siblingCandidate) external view returns (address);
   function cumulativeProtectionOf(address _addr) external view returns (uint256, uint256);
   function getProtectedAddress(address _addr) external view returns (bool, uint256, uint256);
   function isUniswapTokenPair(address _addr) external returns (bool);

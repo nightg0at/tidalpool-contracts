@@ -14,10 +14,10 @@ import "./interfaces/ITideToken.sol";
 contract TideParent is Whitelist {
 
   address private _poseidon;
-  address[2] public siblings;
+  address[2] public siblings; //0: tidal, 1: riptide
 
-  uint256 private _burnRate = 69 * 1e17; //6.9%
-  uint256 private _transmuteRate = 42 * 1e16; //0.42%
+  uint256 private _burnRate = 69e17; //6.9%
+  uint256 private _transmuteRate = 42e16; //0.42%
 
   function setPoseidon(address _newPoseidon) public onlyOwner {
     if (whitelist[_poseidon].active) {
@@ -32,7 +32,7 @@ contract TideParent is Whitelist {
   }
 
   function setSibling(uint256 _index, address _token) public onlyOwner {
-    require(_token != address(0), "TIDECONFIG::setToken: zero address");
+    require(_token != address(0), "TIDEPARENT::setToken: zero address");
     siblings[_index] = _token;
   }
 
@@ -43,12 +43,12 @@ contract TideParent is Whitelist {
   }
 
   function setBurnRate(uint256 _newBurnRate) external onlyOwner {
-    require(_newBurnRate <= 2 * 1e17, "TIDECONFIG:setBurnRate: 20% max");
+    require(_newBurnRate <= 2e17, "TIDEPARENT:setBurnRate: 20% max");
     _burnRate = _newBurnRate;
   }
 
   function setTransmuteRate(uint256 _newTransmuteRate) external onlyOwner {
-    require(_newTransmuteRate <= 1e17, "TIDECONFIG:setTransmuteRate: 10% max");
+    require(_newTransmuteRate <= 1e17, "TIDEPARENT:setTransmuteRate: 10% max");
     _transmuteRate = _newTransmuteRate;
   }
 
@@ -69,9 +69,13 @@ contract TideParent is Whitelist {
     return _transmuteRate;
   }
 
-  function sibling() public view returns (address) {
-    require(msg.sender == siblings[0] || msg.sender == siblings[1], "TideConfig::sibling: No sibling");
-    return msg.sender == siblings[0] ? siblings[1] : siblings[0];
+  function sibling(address _siblingCandidate) public view returns (address) {
+    if (_siblingCandidate == siblings[0]) {
+      return siblings[1];
+    } else if (_siblingCandidate == siblings[1]) {
+      return siblings[0];
+    } else {
+      return address(0);
+    }
   }
-
 }

@@ -12,29 +12,29 @@ import "@openzeppelin/contracts/token/ERC20/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ds-math/math.sol";
 import "./interfaces/ITideToken.sol";
-import "./interfaces/ITideTokenParent.sol";
+import "./interfaces/ITideParent.sol";
 import "./interfaces/IPoseidon.sol";
 
 contract TideToken is ERC20Burnable, Ownable, DSMath {
-  ITideTokenParent public parent;
+  ITideParent public parent;
 
   constructor(
     string memory name,
     string memory symbol,
-    ITideTokenParent _parent
+    ITideParent _parent
   ) public ERC20(name, symbol)
   {  
     parent = _parent;
   }
 
   modifier onlySibling() {
-    require(parent.sibling() == address(this), "TIDE::onlySibling: Must be sibling");
+    require(parent.sibling(msg.sender) == address(this), "TIDE::onlySibling: Must be sibling");
     _;
   }
 
   modifier onlyMinter() {
     require(
-      parent.sibling() == address(this) || msg.sender == owner(),
+      parent.sibling(msg.sender) == address(this) || msg.sender == owner(),
       "TIDE::onlyMinter: Must be owner or sibling to call mint"
     );
     _;
@@ -48,7 +48,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
 
   function setParent(address _newParent) public onlyParent {
     require(_newParent != address(0), "TIDE::setParent: zero address");
-    parent = ITideTokenParent(_newParent);
+    parent = ITideParent(_newParent);
   }
   
   /*
@@ -64,7 +64,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       amount = _transferBurn(msg.sender, amount);
     }
     if (parent.willWipeout(msg.sender, _recipient)) {
-      ITideToken sibling = ITideToken(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transfer(_recipient, amount);
@@ -76,7 +76,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       amount = _transferBurn(_sender, amount);
     }
     if (parent.willWipeout(_sender, _recipient)) {
-      ITideToken sibling = ITideToken(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.wipeout(_recipient, amount, address(this));
     }
     return super.transferFrom(_sender, _recipient, amount);
@@ -88,7 +88,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
       _burn(_sender, burnAmount);
-      ITideToken sibling = ITideToken(parent.sibling());
+      ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.mint(_sender, burnAmount);
     } else {
       // percentage burned
@@ -128,7 +128,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
 
   function _reduce(address _recipient, uint256 _amount, uint256 _proportion, uint256 _floor) internal view returns (uint256) {
     uint256 burnAmount = wmul(_amount, _proportion);
-    ITideToken sibling = ITideToken(parent.sibling());
+    ITideToken sibling = ITideToken(parent.sibling(address(this)));
     uint256 otherBalance = sibling.balanceOf(_recipient);
     // if resultant balance lower than zero adjust to zero
     if (burnAmount > otherBalance) {

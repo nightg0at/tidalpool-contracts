@@ -1,6 +1,7 @@
 /*
-  surf tidalpool presale
+  Tidalpool presale
 
+  @nightg0at
   SPDX-License-Identifier: MIT
 */
 
@@ -112,14 +113,13 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     // get how many surf we need from uniswap
     uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(factory, msg.value, surfPath);
     uint surfAmount = _buyPrep(outputEstimate[1], _tid);
-    uint deadline = block.timestamp + 5 minutes;
     uint surfBalBefore = surf.balanceOf(address(this));
     uint ethBalBefore = sub(address(this).balance, msg.value);
     router.swapETHForExactTokens{value: msg.value}(
       surfAmount,
       surfPath,
       address(this),
-      deadline
+      block.timestamp
     );
     
     if (address(this).balance > ethBalBefore) {
@@ -202,7 +202,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   // bump the sale stage up to 3 (finalized)
   // this can be called by anyone during stage 2 (finished)
   function finalize() public onlyStage(2) {
-    uint deadline = block.timestamp + 5 minutes;
     surf.approve(address(router), surf.balanceOf(address(this)));
 
     // mint and supply tidal + half surf liquidity
@@ -217,7 +216,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
       surfLiquidity,
       t[0].sold,
       address(0),
-      deadline
+      block.timestamp
     );
 
     // mint and supply tidal + half surf liquidity
@@ -232,7 +231,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
       surfLiquidity,
       t[1].sold,
       address(0),
-      deadline
+      block.timestamp
     );
 
     // enable buyers to withdraw
