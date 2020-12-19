@@ -422,6 +422,21 @@ contract Poseidon is Ownable {
         emit Deposit(msg.sender, _pid, _amount);
     }
 
+
+    /*
+        TODO
+
+        "
+        Withdraw fees:
+	    People who withdraw from the tidal/surf or the riptide/surf liquidity pool
+        will see 10% of their lp tokens taxed. The lp tokens are split into
+        tidal/riptide and surf. The tidal/riptide tokens are used to buy surf, and
+        all of the surf tokens are sent to the whirlpool.
+        "
+
+    */
+
+
     // Withdraw LP tokens from MasterChef.
     function withdraw(uint256 _pid, uint256 _amount) public {
         PoolInfo storage pool = poolInfo[_pid];

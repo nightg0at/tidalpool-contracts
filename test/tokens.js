@@ -35,7 +35,7 @@ async function fixture(provider) {
   return {parent, tidal, riptide, poseidon, owner, user}
 }
 
-describe("Tide parent", () => {
+describe("Tide parent config", () => {
   beforeEach(async () => {
     c = await loadFixture(fixture);
     parent = c.parent;
@@ -147,11 +147,44 @@ describe("Tide parent", () => {
   });
 });
 
+describe("Tide parent whitelist management", () => {
+  beforeEach(async () => {
+    c = await loadFixture(fixture);
+    parent = c.parent;
+    tidal = c.tidal;
+    riptide = c.riptide;
+    poseidon = c.poseidon;
+    owner = c.owner;
+    user = c.user;
+  });
+
+  it("Protector: add ERC20/ERC777")
+  it("Protector: edit ERC20/ERC777")
+  it("Protector: add ERC1155 protector")
+  it("Protector: edit ERC1155 protector")
+  it("Protector: disable token")
+  it("Protector: get details")
+  it("Protector: address has token")
+  it("Protector: cumulative protection of address")
+  
+  it("Protected address: add")
+  it("Protected address: edit")
+  it("Protected address: disable")
+  it("Protected address: get")
+
+  it("Whitelist: add")
+  it("Whitelist: edit")
+  it("Whitelist: disable")
+  it("Whitelist: get")
+
+  it("Whitelist: burn protected")
+  it("Whitelist: wipeout protected")
+
+});
 
 
 
-
-describe("Tide tokens", () => {
+describe("Tide tokens: non-transfer functionality", () => {
   beforeEach(async () => {
     c = await loadFixture(fixture);
     parent = c.parent;
@@ -202,6 +235,41 @@ describe("Tide tokens", () => {
     // parent being able to do this is tested in the parent section
   });
 
-  
+});
+
+
+describe("Tide tokens: transfers", () => {
+  beforeEach(async () => {
+    c = await loadFixture(fixture);
+    parent = c.parent;
+    tidal = c.tidal;
+    riptide = c.riptide;
+    poseidon = c.poseidon;
+    owner = c.owner;
+    user = c.user;
+  });
+
+  it("An out of phase token has 6.9% burned during transfer")
+
+  it("An in phase token has 0.42% transmuted during transfer")
+
+  it("Wipeout as expected with no protection")
+
+  it("Wipeout as expected with protection: surfboard")
+  it("Wipeout as expected with protection: bronze trident")
+  it("Wipeout as expected with protection: bronze trident + surfboard")
+  it("Wipeout as expected with protection: silver trident")
+  it("Wipeout as expected with protection: silver trident + surfboard")
+  it("Wipeout as expected with protection: gold trident")
+  it("Wipeout as expected with protection: gold trident + surfboard")
+
+  it("Wipeout as expected with protected address")
+  it("Wipeout as expected with uniswap token pair")
+  it("Wipeout as expected with whitelisted address: sendWipeout")
+  it("Wipeout as expected with whitelisted address: receiveWipeout")
+
+  it("Transfer as expected with whitelisted address: sendBurn")
+  it("Transfer as expected with whitelisted address: receiveBurn")
+
 
 });
