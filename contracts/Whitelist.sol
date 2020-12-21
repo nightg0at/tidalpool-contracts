@@ -18,30 +18,35 @@ contract Whitelist is Ownable {
 
   // protectors can be ERC20, ERC777 or ERC1155 tokens
   // ERC115 tokens have a different balanceOf() method, so we use the ERC1820 registry to identify the ERC1155 interface
-  IERC1820Registry private constant ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
+  //IERC1820Registry private constant ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
+  IERC1820Registry private erc1820Registry; // 0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24
   bytes4 private constant ERC1155_INTERFACE_ID = 0xd9b67a26;
 
   // used to identify if an address is likely to be a uniswap pair
   address private constant UNISWAP_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
 
-
   // tokens that offer the holder some kind of protection
-  struct TokenDetails {
+  struct TokenAttributes {
     bool active;
-    uint256 id; // for IERC1155 tokens only
+    //uint256 id; // for IERC1155 tokens only
     uint256 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
     uint256 floor; // the lowest the balance can be after a wipeout event
   }
 
+  struct TokenID {
+    address addr;
+    uint256 id; // for IERC1155 tokens else 0
+  }
+
   // addresses that have some kind of protection as if they are holding protective tokens
-  struct AddressDetails {
+  struct AddressAttributes {
     bool active;
     uint256 proportion;
     uint256 floor;
   }
 
   // addresses that do not incur punitive burns or wipeouts as senders or receivers
-  struct WhitelistDetails {
+  struct WhitelistAttributes {
     bool active;
     bool sendBurn;
     bool receiveBurn;
@@ -52,53 +57,56 @@ contract Whitelist is Ownable {
   uint256 public defaultProportion = 1e18;
   uint256 public defaultFloor = 0;
 
-  constructor() public {
+  constructor(
+    IERC1820Registry _erc1820Registry
+  ) public {
+    erc1820Registry = _erc1820Registry;
     /*
-    addProtector(0x00, 2, , 5 * 1e17, 0); // surfboard
-    addProtector(0x00, 2, , 1e18, 2496 * 1e14); // bronze trident 0.2496 floor
-    addProtector(0x00, 2, , 1e18, 2496 * 1e14); // bronze trident 0.2496 floor
-    addProtector(0x00, 2, , 1e18, 4200 * 1e14); // silver trident 0.42 floor
-    addProtector(0x00, 2, , 1e18, 6900 * 1e14); // gold trident 0.69 floor
+    addProtector(0x00, 2, , 5e17, 0); // surfboard
+    addProtector(0x00, 2, , 1e18, 2496e14); // bronze trident 0.2496 floor
+    addProtector(0x00, 2, , 1e18, 42e16); // silver trident 0.42 floor
+    addProtector(0x00, 2, , 1e18, 69e16); // gold trident 0.69 floor
     */
   }
 
-  mapping (address => AddressDetails) public protectedAddress;
-  address[] public protectors;
-  mapping (address => TokenDetails) public protectorDetails;
-  mapping (address => WhitelistDetails) public whitelist;
-  
+  mapping (address => AddressAttributes) public protectedAddress;
+  TokenID[] public protectors;
+  mapping (address => mapping (uint256 => TokenAttributes)) public protectorAttributes;
+  mapping (address => WhitelistAttributes) public whitelist;
   
 
   function addProtector(address _token, uint256 _id, uint256 _proportion, uint256 _floor) public onlyOwner {
-    require(protectorDetails[_token].active == false, "WIPEOUT::addProtector: Token already added");
-    editProtector(_token, true, _id, _proportion, _floor);
-    protectors.push(_token);
+    uint256 id = isERC1155(_token) ? _id : 0;
+    require(protectorAttributes[_token][id].active == false, "WIPEOUT::addProtector: Token already active");
+    editProtector(_token, true, id, _proportion, _floor);
+    protectors.push(TokenID(_token, id));
   }
 
   function editProtector(address _token, bool _active, uint256 _id, uint256 _proportion, uint256 _floor) public onlyOwner {
-    require(_token != address(0), "WIPEOUT::editProtector: zero address");
-    require(_proportion < 2**64, "WIPEOUT::editProtector: _proportion too big");
-    require(_floor < 2**64, "WIPEOUT::editProtector: _floor too big");
-    protectorDetails[_token] = TokenDetails(_active, _id, _proportion, _floor);
+    protectorAttributes[_token][_id] = TokenAttributes(_active, _proportion, _floor);
   }
 
-  function getProtectorDetails(address _addr) external view returns (bool, uint256, uint256, uint256) {
+  function protectorLength() external view returns (uint256) {
+    return protectors.length;
+  }
+
+  function getProtectorAttributes(address _addr, uint256 _id) external view returns (bool, uint256, uint256) {
     return (
-      protectorDetails[_addr].active,
-      protectorDetails[_addr].id,
-      protectorDetails[_addr].proportion,
-      protectorDetails[_addr].floor
+      protectorAttributes[_addr][_id].active,
+      protectorAttributes[_addr][_id].proportion,
+      protectorAttributes[_addr][_id].floor
     );
   }
 
-  function getProtectors() external view returns (address[] memory) { // can i return arrays yet?
-    return protectors;
+
+  function isERC1155(address _token) private view returns (bool) {
+    return erc1820Registry.implementsERC165Interface(_token, ERC1155_INTERFACE_ID);
   }
 
-  function hasProtector(address _addr, address _protector) public view returns (bool) {
+  function hasProtector(address _addr, address _protector, uint256 _id) public view returns (bool) {
     bool has = false;
-    if (ERC1820_REGISTRY.implementsERC165Interface(_protector, ERC1155_INTERFACE_ID)) {
-      if (IERC1155(_protector).balanceOf(_addr, protectorDetails[_protector].id) > 0) {
+    if (isERC1155(_protector)) {
+      if (IERC1155(_protector).balanceOf(_addr, _id) > 0) {
         has = true;
       }
     } else {
@@ -113,13 +121,14 @@ contract Whitelist is Ownable {
     uint256 proportion = defaultProportion;
     uint256 floor = defaultFloor;
     for (uint256 i=0; i<protectors.length; i++) {
-      address protector = protectors[i];
-      if (hasProtector(_addr, protector)) {
-        if (proportion > protectorDetails[protector].proportion) {
-          proportion = protectorDetails[protector].proportion;
+      address protector = protectors[i].addr;
+      uint256 id = protectors[i].id;
+      if (hasProtector(_addr, protector, id)) {
+        if (proportion > protectorAttributes[protector][id].proportion) {
+          proportion = protectorAttributes[protector][id].proportion;
         }
-        if (floor < protectorDetails[protector].floor) {
-          floor = protectorDetails[protector].floor;
+        if (floor < protectorAttributes[protector][id].floor) {
+          floor = protectorAttributes[protector][id].floor;
         }
       }
     }
@@ -128,7 +137,7 @@ contract Whitelist is Ownable {
 
   function setProtectedAddress(address _addr, bool _active, uint256 _proportion, uint256 _floor) public onlyOwner {
     require(_addr != address(0), "WIPEOUT::editProtector: zero address");
-    protectedAddress[_addr] = AddressDetails(_active, _proportion, _floor);
+    protectedAddress[_addr] = AddressAttributes(_active, _proportion, _floor);
   }
 
   function getProtectedAddress(address _addr) external view returns (bool, uint256, uint256) {
@@ -148,7 +157,7 @@ contract Whitelist is Ownable {
     bool _receiveWipeout
   ) public onlyOwner {
     require(_whitelisted != address(0), "WIPEOUT::editWhitelist: zero address");
-    whitelist[_whitelisted] = WhitelistDetails(_active, _sendBurn, _receiveBurn, _sendWipeout, _receiveWipeout);
+    whitelist[_whitelisted] = WhitelistAttributes(_active, _sendBurn, _receiveBurn, _sendWipeout, _receiveWipeout);
   }
 
   function getWhitelist(address _addr) external view returns (bool, bool, bool, bool, bool) {

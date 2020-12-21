@@ -19,6 +19,10 @@ contract TideParent is Whitelist {
   uint256 private _burnRate = 69e17; //6.9%
   uint256 private _transmuteRate = 42e16; //0.42%
 
+  constructor(
+    IERC1820Registry _erc1820Registry
+  ) public Whitelist(_erc1820Registry) {}
+
   function setPoseidon(address _newPoseidon) public onlyOwner {
     if (whitelist[_poseidon].active) {
       setWhitelist(_poseidon, false, false, false, false, false);
