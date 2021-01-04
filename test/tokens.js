@@ -75,7 +75,7 @@ describe("Tide parent config", () => {
   });  
   
   it("Burn rate initialized at 6.9%", async () => {
-    expect(await parent.burnRate()).to.equal("6900000000000000000");
+    expect(await parent.burnRate()).to.equal("69000000000000000");
   });
 
   it("Burn rate max setting of 20%", async () => {
@@ -84,7 +84,7 @@ describe("Tide parent config", () => {
   });
 
   it("Transmute rate initialized at 0.42%", async () => {
-    expect(await parent.transmuteRate()).to.equal("420000000000000000");
+    expect(await parent.transmuteRate()).to.equal("4200000000000000");
   });
 
   it("Transmute rate max setting of 10%", async () => {
@@ -289,13 +289,54 @@ describe("Tide parent whitelist management", () => {
   });
 
 
-  it("Whitelist: add")
-  it("Whitelist: edit")
-  it("Whitelist: disable")
-  it("Whitelist: get")
+  it("Whitelist: add", async () => {
+    await parent.setWhitelist(user.alice.address, true, true, false, true, false);
+    const details = await parent.getWhitelist(user.alice.address);
+    const expectedDetails = [true, true, false, true, false]
+    expect(details[0]).to.equal(expectedDetails[0]);
+    expect(details[1]).to.equal(expectedDetails[1]);
+    expect(details[2]).to.equal(expectedDetails[2]);
+    expect(details[3]).to.equal(expectedDetails[3]);
+    expect(details[4]).to.equal(expectedDetails[4]);
+  });
 
-  it("Whitelist: burn protected")
-  it("Whitelist: wipeout protected")
+  it("Whitelist: edit", async () => {
+    await parent.setWhitelist(user.alice.address, true, true, false, true, false);
+    const detailsBefore = await parent.getWhitelist(user.alice.address);
+    expect(detailsBefore[0]).to.equal(true);
+    expect(detailsBefore[1]).to.equal(true);
+    expect(detailsBefore[2]).to.equal(false);
+    expect(detailsBefore[3]).to.equal(true);
+    expect(detailsBefore[4]).to.equal(false);
+    await parent.setWhitelist(user.alice.address, true, false, true, false, true);
+    const detailsAfter = await parent.getWhitelist(user.alice.address);
+    expect(detailsAfter[0]).to.equal(true);
+    expect(detailsAfter[1]).to.equal(false);
+    expect(detailsAfter[2]).to.equal(true);
+    expect(detailsAfter[3]).to.equal(false);
+    expect(detailsAfter[4]).to.equal(true);
+  });
+
+  it("Whitelist: disable", async () => {
+    await parent.setWhitelist(user.alice.address, true, true, true, true, true);
+    const detailsBefore = await parent.getWhitelist(user.alice.address);
+    expect(detailsBefore[0]).to.equal(true);
+    await parent.setWhitelist(user.alice.address, false, true, true, true, true);
+    const detailsAfter = await parent.getWhitelist(user.alice.address);
+    expect(detailsAfter[0]).to.equal(false);
+  });
+
+  it("Whitelist: burn protected", async () => {
+    expect(await parent.willBurn(user.alice.address, user.bob.address)).to.equal(true);
+    await parent.setWhitelist(user.alice.address, true, true, true, true, true);
+    expect(await parent.willBurn(user.alice.address, user.bob.address)).to.equal(false);
+  });
+
+  it("Whitelist: wipeout protected", async () => {
+    expect(await parent.willWipeout(user.alice.address, user.bob.address)).to.equal(true);
+    await parent.setWhitelist(user.alice.address, true, true, true, true, true);
+    expect(await parent.willWipeout(user.alice.address, user.bob.address)).to.equal(false);
+  });
 
 });
 
@@ -344,6 +385,7 @@ describe("Tide tokens: non-transfer functionality", () => {
 });
 
 
+
 describe("Tide tokens: transfers", () => {
   beforeEach(async () => {
     c = await loadFixture(main);
@@ -352,29 +394,502 @@ describe("Tide tokens: transfers", () => {
     riptide = c.riptide;
     owner = c.owner;
     user = c.user;
+    mock = c.mock;
   });
 
-  it("An out of phase token has 6.9% burned during transfer")
+  it("An out of phase token has 6.9% burned during transfer", async () => {
+    await riptide.mint(user.alice.address, 2000);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(2000);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(0);
+    await riptide.connect(user.alice).transfer(user.bob.address, 1000);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(1000);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(931);
+  });
 
-  it("An in phase token has 0.42% transmuted during transfer")
+  it("An in phase token has 0.42% transmuted during transfer", async () => {
+    await tidal.mint(user.alice.address, 20000);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(20000);
+    expect(await tidal.balanceOf(user.bob.address)).to.equal(0);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(0);
+    await tidal.connect(user.alice).transfer(user.bob.address, 10000);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(10000);
+    expect(await tidal.balanceOf(user.bob.address)).to.equal(9958);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(42);
+  });
+  it("Wipeout with no protection", async () => {
+    await tidal.mint(user.alice.address, 20000);
+    await riptide.mint(user.bob.address, 10000);
+    await tidal.connect(user.alice).transfer(user.bob.address, 10000);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(42);
+  });
 
-  it("Wipeout as expected with no protection")
+  it("Wipeout with protection: surfboard", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: 10000,
+      feeMultiplier: 0.0042,
+      proportion: 0.5,
+      floor: 0
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, 20000);
+    await riptide.mint(user.bob.address, 15000);
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    const resultantRiptide = 15000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
 
-  it("Wipeout as expected with protection: surfboard")
-  it("Wipeout as expected with protection: bronze trident")
-  it("Wipeout as expected with protection: bronze trident + surfboard")
-  it("Wipeout as expected with protection: silver trident")
-  it("Wipeout as expected with protection: silver trident + surfboard")
-  it("Wipeout as expected with protection: gold trident")
-  it("Wipeout as expected with protection: gold trident + surfboard")
+  it("Wipeout with protection: bronze trident, burn clear of floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.2496
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    const resultantRiptide = 1500000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
 
-  it("Wipeout as expected with protected address")
-  it("Wipeout as expected with uniswap token pair")
-  it("Wipeout as expected with whitelisted address: sendWipeout")
-  it("Wipeout as expected with whitelisted address: receiveWipeout")
+  it("Wipeout with protection: bronze trident, burn intersects floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.2496
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "500000000000000000"); // 0.5
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("249600000000000000");
+  });
 
-  it("Transfer as expected with whitelisted address: sendBurn")
-  it("Transfer as expected with whitelisted address: receiveBurn")
+  it("Wipeout with protection: bronze trident, balance under floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.2496
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "249500000000000000"); // 0.2495
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("249500000000000000");
+  });
+
+  it("Wipeout protection: bronze trident + surfboard", async () => {
+    const p0 = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.2496
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    const surfboard = await deployMockContract(
+      owner,
+      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
+    );
+    const p1 = {
+      addr: surfboard.address,
+      txAmount: "1000000000000000000",
+      proportion: 0.5,
+      floor: 0
+    };
+    await surfboard.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p0.addr,
+      0,
+      ethers.utils.parseEther(p0.proportion.toString()),
+      ethers.utils.parseEther(p0.floor.toString())
+    );
+    await parent.addProtector(
+      p1.addr,
+      0,
+      ethers.utils.parseEther(p1.proportion.toString()),
+      ethers.utils.parseEther(p1.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p0.addr, 0)).to.equal(true);
+    expect(await parent.hasProtector(user.bob.address, p1.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p0.txAmount);
+    const resultantRiptide = 1500000000000000000 - ((p0.txAmount - (p0.txAmount * p0.feeMultiplier)) * p1.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+  it("Wipeout with protection: silver trident, burn clear of floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.42
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    const resultantRiptide = 1500000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+
+  it("Wipeout with protection: silver trident, burn intersects floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.42
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "500000000000000000"); // 0.5
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("420000000000000000");
+  });
+
+  it("Wipeout with protection: silver trident, balance under floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.42
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "249500000000000000"); // 0.2495
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("249500000000000000");
+  });
+
+  it("Wipeout protection: silver trident + surfboard", async () => {
+    const p0 = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.42
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    const surfboard = await deployMockContract(
+      owner,
+      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
+    );
+    const p1 = {
+      addr: surfboard.address,
+      txAmount: "1000000000000000000",
+      proportion: 0.5,
+      floor: 0
+    };
+    await surfboard.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p0.addr,
+      0,
+      ethers.utils.parseEther(p0.proportion.toString()),
+      ethers.utils.parseEther(p0.floor.toString())
+    );
+    await parent.addProtector(
+      p1.addr,
+      0,
+      ethers.utils.parseEther(p1.proportion.toString()),
+      ethers.utils.parseEther(p1.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p0.addr, 0)).to.equal(true);
+    expect(await parent.hasProtector(user.bob.address, p1.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p0.txAmount);
+    const resultantRiptide = 1500000000000000000 - ((p0.txAmount - (p0.txAmount * p0.feeMultiplier)) * p1.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+  it("Wipeout with protection: gold trident, burn clear of floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.69
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "2500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    const resultantRiptide = 2500000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+
+  it("Wipeout with protection: gold trident, burn intersects floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.69
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1000000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("690000000000000000");
+  });
+
+  it("Wipeout with protection: gold trident, balance under floor", async () => {
+    const p = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.69
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p.addr,
+      0,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "249500000000000000"); // 0.2495
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("249500000000000000");
+  });
+
+  it("Wipeout protection: gold trident + surfboard", async () => {
+    const p0 = {
+      addr: mock.erc20.address,
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 1,
+      floor: 0.69
+    }
+    await mock.erc20.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    const surfboard = await deployMockContract(
+      owner,
+      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
+    );
+    const p1 = {
+      addr: surfboard.address,
+      txAmount: "1000000000000000000",
+      proportion: 0.5,
+      floor: 0
+    };
+    await surfboard.mock.balanceOf.withArgs(user.bob.address).returns(1);
+    await parent.addProtector(
+      p0.addr,
+      0,
+      ethers.utils.parseEther(p0.proportion.toString()),
+      ethers.utils.parseEther(p0.floor.toString())
+    );
+    await parent.addProtector(
+      p1.addr,
+      0,
+      ethers.utils.parseEther(p1.proportion.toString()),
+      ethers.utils.parseEther(p1.floor.toString())
+    );
+    expect(await parent.hasProtector(user.bob.address, p0.addr, 0)).to.equal(true);
+    expect(await parent.hasProtector(user.bob.address, p1.addr, 0)).to.equal(true);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "1500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p0.txAmount);
+    const resultantRiptide = 1500000000000000000 - ((p0.txAmount - (p0.txAmount * p0.feeMultiplier)) * p1.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+
+
+  it("Wipeout protection: protected address", async () => {
+    // as if they hold a gold trident + surfboard
+    const p = {
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 0.5,
+      floor: 0.69
+    };
+    parent.setProtectedAddress(
+      user.bob.address,
+      true,
+      ethers.utils.parseEther(p.proportion.toString()),
+      ethers.utils.parseEther(p.floor.toString())
+    );
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "2500000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, p.txAmount);
+    const resultantRiptide = 2500000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
+  });
+
+  it("Wipeout protection: uniswap token pair", async () => {
+    // uniswap pairs are gold trident + surfboard holders
+    // + all incoming attacking tokens are destroyed
+    const p = {
+      txAmount: "1000000000000000000",
+      feeMultiplier: 0.0042,
+      proportion: 0.5,
+      floor: 0.69
+    };
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(mock.uniswapPair.address, "5000000000000000000");
+    await tidal.connect(user.alice).transfer(mock.uniswapPair.address, p.txAmount);
+    const resultantRiptide = 5000000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
+    expect(await riptide.balanceOf(mock.uniswapPair.address)).to.equal(resultantRiptide.toString());
+    expect(await tidal.balanceOf(mock.uniswapPair.address)).to.equal(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal("1000000000000000000");
+  });
+
+  it("Wipeout protection: whitelisted address: sendWipeout", async () => {
+    // sender cannot cause wipeout
+    await parent.setWhitelist(
+      user.alice.address,
+      true,   // _active
+      false,  // _sendBurn
+      false,  // _receiveBurn
+      true,   // _sendWipeout
+      false   // _receiveWipeout
+    );
+    expect(await parent.willWipeout(user.alice.address, user.bob.address)).to.equal(false);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "5000000000000000000");
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("5000000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("5000000000000000000");
+  });
+
+  it("Wipeout protection whitelisted address: receiveWipeout", async () => {
+    // receiver cannot experience wipeout
+    await parent.setWhitelist(
+      user.bob.address,
+      true,   // _active
+      false,  // _sendBurn
+      false,  // _receiveBurn
+      false,   // _sendWipeout
+      true   // _receiveWipeout
+    );
+    expect(await parent.willWipeout(user.alice.address, user.bob.address)).to.equal(false);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await riptide.mint(user.bob.address, "5000000000000000000");
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("5000000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await riptide.balanceOf(user.bob.address)).to.equal("5000000000000000000");
+  });
+
+  it("Transfer: whitelisted address: sendBurn", async () => {
+    // no transfer burn or transmute for sender
+    await parent.setWhitelist(
+      user.alice.address,
+      true,   // _active
+      true,  // _sendBurn
+      false,  // _receiveBurn
+      false,   // _sendWipeout
+      false   // _receiveWipeout
+    );
+    expect(await parent.willBurn(user.alice.address, user.bob.address)).to.equal(false);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await tidal.balanceOf(user.bob.address)).to.equal("1000000000000000000");
+    await mock.poseidon.mock.getPhase.returns(riptide.address);
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await tidal.balanceOf(user.bob.address)).to.equal("2000000000000000000");
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(0);
+  });
+
+  it("Transfer: whitelisted address: receiveBurn", async () => {
+    // no transfer burn or transmute for receiver
+    await parent.setWhitelist(
+      user.bob.address,
+      true,   // _active
+      false,  // _sendBurn
+      true,  // _receiveBurn
+      false,   // _sendWipeout
+      false   // _receiveWipeout
+    );
+    expect(await parent.willBurn(user.alice.address, user.bob.address)).to.equal(false);
+    await tidal.mint(user.alice.address, "2000000000000000000");
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await tidal.balanceOf(user.bob.address)).to.equal("1000000000000000000");
+    await mock.poseidon.mock.getPhase.returns(riptide.address);
+    await tidal.connect(user.alice).transfer(user.bob.address, "1000000000000000000");
+    expect(await tidal.balanceOf(user.bob.address)).to.equal("2000000000000000000");
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+    expect(await riptide.balanceOf(user.alice.address)).to.equal(0);
+  });
 
 
 });

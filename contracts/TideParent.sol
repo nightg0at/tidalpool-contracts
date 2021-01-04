@@ -16,8 +16,8 @@ contract TideParent is Whitelist {
   address private _poseidon;
   address[2] public siblings; //0: tidal, 1: riptide
 
-  uint256 private _burnRate = 69e17; //6.9%
-  uint256 private _transmuteRate = 42e16; //0.42%
+  uint256 private _burnRate = 69e15; //6.9%, 0.069
+  uint256 private _transmuteRate = 42e14; //0.42%, 0.0042
 
   constructor(
     IERC1820Registry _erc1820Registry

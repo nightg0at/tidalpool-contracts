@@ -13,5 +13,5 @@ interface ITideToken is IERC20 {
   function cap() external view returns (uint256);
   function mint(address _to, uint256 _amount) external;
   function setParent(address _newConfig) external;
-  function wipeout(address _recipient, uint256 _amount, address _otherToken) external;
+  function wipeout(address _recipient, uint256 _amount) external;
 }

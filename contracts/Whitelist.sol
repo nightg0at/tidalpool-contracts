@@ -62,10 +62,10 @@ contract Whitelist is Ownable {
   ) public {
     erc1820Registry = _erc1820Registry;
     /*
-    addProtector(0x00, 2, , 5e17, 0); // surfboard
-    addProtector(0x00, 2, , 1e18, 2496e14); // bronze trident 0.2496 floor
-    addProtector(0x00, 2, , 1e18, 42e16); // silver trident 0.42 floor
-    addProtector(0x00, 2, , 1e18, 69e16); // gold trident 0.69 floor
+    addProtector(0x00, 0, , 5e17, 0); // surfboard
+    addProtector(0x00, 123, , 1e18, 2496e14); // bronze trident 0.2496 floor
+    addProtector(0x00, 456, , 1e18, 42e16); // silver trident 0.42 floor
+    addProtector(0x00, 789, , 1e18, 69e16); // gold trident 0.69 floor
     */
   }
 
@@ -170,11 +170,23 @@ contract Whitelist is Ownable {
     );
   }
 
+  // checks if the address is a deployed contract and if so,
+  // checks if the factory() method is present.
+  // returns true if it is.
+  // This is easy to spoof but the gains are low enough for this to be ok.
   function isUniswapTokenPair(address _addr) public view returns (bool) {
-    try IUniswapV2Pair(_addr).factory() returns (address _factory) {
-      return _factory == UNISWAP_FACTORY ? true : false;
-    } catch {
+    uint32 size;
+    assembly {
+      size := extcodesize(_addr)
+    }
+    if (size == 0) {
       return false;
+    } else {
+      try IUniswapV2Pair(_addr).factory() returns (address _factory) {
+        return _factory == UNISWAP_FACTORY ? true : false;
+      } catch {
+        return false;
+      }
     }
   }
 

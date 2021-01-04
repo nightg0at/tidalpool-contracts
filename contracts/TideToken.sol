@@ -15,6 +15,8 @@ import "./interfaces/ITideToken.sol";
 import "./interfaces/ITideParent.sol";
 import "./interfaces/IPoseidon.sol";
 
+//import "hardhat/console.sol";
+
 contract TideToken is ERC20Burnable, Ownable, DSMath {
   ITideParent public parent;
 
@@ -65,7 +67,11 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
     }
     if (parent.willWipeout(msg.sender, _recipient)) {
       ITideToken sibling = ITideToken(parent.sibling(address(this)));
-      sibling.wipeout(_recipient, amount, address(this));
+      sibling.wipeout(_recipient, amount);
+      if (parent.isUniswapTokenPair(_recipient)) {
+        _burn(msg.sender, amount);
+        amount = 0;
+      }
     }
     return super.transfer(_recipient, amount);
   }
@@ -77,24 +83,28 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
     }
     if (parent.willWipeout(_sender, _recipient)) {
       ITideToken sibling = ITideToken(parent.sibling(address(this)));
-      sibling.wipeout(_recipient, amount, address(this));
+      sibling.wipeout(_recipient, amount);
+      if (parent.isUniswapTokenPair(_recipient)) {
+        _burn(_sender, amount);
+        amount = 0;
+      }
     }
     return super.transferFrom(_sender, _recipient, amount);
   }
+
 
   function _transferBurn(address _sender, uint256 _amount) private returns (uint256) {
     uint256 burnAmount;
     if (_inPhase()) {
       // percentage transmuted into sibling token and sent to sender
       burnAmount = wmul(_amount, parent.transmuteRate());
-      _burn(_sender, burnAmount);
       ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.mint(_sender, burnAmount);
     } else {
       // percentage burned
       burnAmount = wmul(_amount, parent.burnRate());
-      _burn(_sender, burnAmount);
     }
+    _burn(_sender, burnAmount);
     // return the new amount after burning
     return sub(_amount, burnAmount);
   }
@@ -102,6 +112,7 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
   /*
   // do we need this?
   //   only if poseidon burns some tokens for some reason
+  //   perhaps have a burn own balance function?
   function burn(address account, uint256 amount) public onlyOwner {
     _burn(account, amount);
   }
@@ -115,10 +126,11 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
     uint256 burnAmount;
     (bool active, uint256 proportion, uint256 floor) = parent.getProtectedAddress(_recipient);
     if (parent.isUniswapTokenPair(_recipient)) {
-      // apply double wipeout if uniswap pair
-      proportion = proportion*2;
+      // simulate golden trident protection
+      proportion = 5e17;
+      floor = 69e16;
     } else if (!active) {
-      // check if recipient has one or more protector tokens
+      // check if recipient has one or more protective tokens
       (proportion, floor) = parent.cumulativeProtectionOf(_recipient);
     }
     burnAmount = _reduce(_recipient, _amount, proportion, floor);
@@ -127,16 +139,18 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
 
 
   function _reduce(address _recipient, uint256 _amount, uint256 _proportion, uint256 _floor) internal view returns (uint256) {
-    uint256 burnAmount = wmul(_amount, _proportion);
-    ITideToken sibling = ITideToken(parent.sibling(address(this)));
-    uint256 otherBalance = sibling.balanceOf(_recipient);
-    // if resultant balance lower than zero adjust to zero
-    if (burnAmount > otherBalance) {
-      burnAmount = otherBalance;
-    }
-    //if resultant balance lower than floor adjust to floor
-    if (sub(otherBalance, burnAmount) < _floor) {
-      burnAmount = _floor;
+    uint256 balance = balanceOf(_recipient);
+    uint256 burnAmount;
+    if (balance > _floor) {
+      burnAmount = wmul(_amount, _proportion);
+      // if resultant balance lower than zero burn everything
+      if (burnAmount > balance) {
+        burnAmount = balance;
+      }
+      //if resultant balance lower than floor leave floor remaining
+      if (sub(balance, burnAmount) < _floor) {
+        burnAmount = sub(balance, _floor);
+      }
     }
     return burnAmount;
   }

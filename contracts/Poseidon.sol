@@ -13,11 +13,17 @@
 
 pragma solidity 0.6.12;
 
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+
+import "./ds-math/math.sol";
 import "./restaking/interfaces/IStakingAdapter.sol";
 import "./interfaces/ITideToken.sol";
 
@@ -28,7 +34,7 @@ import "./interfaces/ITideToken.sol";
 // distributed and the community can show to govern itself.
 //
 // Have fun reading it. Hopefully it's bug-free. God bless.
-contract Poseidon is Ownable {
+contract Poseidon is Ownable, DSMath {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -64,11 +70,14 @@ contract Poseidon is Ownable {
         IERC20 otherToken; // The OTHER reward token for this pool, if any
     }
 
-    // The SUSHI TOKEN!
-    //CropsToken public sushi;
+    IUniswapV2Router02 router;
 
     ITideToken public tidal;
     ITideToken public riptide;
+
+    mapping (address => uint256) public corePid;
+    mapping (address => address) public ethPath;
+
     // Dev address.
     address public devaddr;
     // Block number when bonus SUSHI period ends.
@@ -96,6 +105,8 @@ contract Poseidon is Ownable {
     uint256 public constant TIDAL_CAP = 69e18;
     uint256 public constant TIDAL_VERTEX = 42e18;
 
+    uint256 private constant BLOCKS_PER_YEAR = 2336000;
+
     // weather
     bool stormy = false;
     uint256 stormDivisor = 2;
@@ -104,18 +115,25 @@ contract Poseidon is Ownable {
     address zeus;
 
 
+
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
+        IUniswapV2Router02 _router,
         ITideToken _tidal,
         ITideToken _riptide,
+        address _rewardEthPath,
         address _devaddr,
         uint256 _startBlock
     ) public {
+        router = _router;
         tidal = _tidal;
         riptide = _riptide;
+        corePid[address(_riptide)] = 1;
+        ethPath[address(_tidal)] = _rewardEthPath;
+        ethPath[address(_riptide)] = _rewardEthPath;
         devaddr = _devaddr;
         startBlock = _startBlock;
         phase = address(_tidal);
@@ -247,6 +265,15 @@ contract Poseidon is Ownable {
 
     function setRewardPerBlock(uint256 _newReward) public onlyOwner {
         baseRewardPerBlock = _newReward;
+    }
+
+
+    // set the reward token's pid and most efficient path to eth
+    // eg if primary tidal pair is tidal/surf then the eth path is the surf/eth uniswap pair
+    function setPricingParams(address _rewardToken, uint256 _pid, address _path) public onlyOwner {
+        require(_rewardToken == address(tidal) || _rewardToken == address(riptide), "invalid token");
+        corePid[_rewardToken] = _pid;
+        ethPath[_rewardToken] = _path;
     }
 
     function tokensPerBlock(address _tideToken) internal view returns (uint256) {
@@ -521,6 +548,141 @@ contract Poseidon is Ownable {
     function dev(address _devaddr) public {
         require(msg.sender == devaddr, "dev: wut?");
         devaddr = _devaddr;
+    }
+
+    // return the current reward token's current price in ETH
+    function rewardPrice() internal view returns (uint256) {
+        address corePair = address(poolInfo[corePid[phase]].lpToken);
+        address otherToken = IUniswapV2Pair(corePair).token0() == phase ? IUniswapV2Pair(corePair).token1() : IUniswapV2Pair(corePair).token0();
+        /*
+            other.balanceOf(phase-other-lp) / phase.balanceOf(phase-other-lp)
+            *
+            other.balanceOf(other-eth-lp) / weth.balanceOf(other-eth-lp)
+        */
+        uint256 price = wmul(
+            wdiv(
+                IERC20(otherToken).balanceOf(corePair),
+                IERC20(phase).balanceOf(corePair)
+            ),
+            wdiv(
+                IERC20(otherToken).balanceOf(ethPath[phase]),
+                IERC20(router.WETH()).balanceOf(ethPath[phase])
+            )
+        );
+        return price;
+    }
+
+    // return the total value of the pool in weth
+    function poolValue(uint256 _pid) internal view returns (uint256) {
+        uint256 value = 0;
+        address lp = address(poolInfo[_pid].lpToken);
+        uint256 portionLp = wdiv(
+            IERC20(lp).balanceOf(address(this)),
+            IERC20(lp).totalSupply()
+        );
+        // if the pair contains weth
+        if (IUniswapV2Pair(lp).token0() == router.WETH() || IUniswapV2Pair(lp).token1() == router.WETH()) {
+            // proportion in pool * total weth in LP * 2
+            value = wmul(portionLp, IERC20(router.WETH()).balanceOf(lp)).mul(2);
+        } else {
+            address wethPair0 = IUniswapV2Factory(router.factory()).getPair(
+                IUniswapV2Pair(lp).token0(),
+                router.WETH()
+            );
+            uint256 wethBal0 = IERC20(router.WETH()).balanceOf(wethPair0);
+
+            address wethPair1 = IUniswapV2Factory(router.factory()).getPair(
+                IUniswapV2Pair(lp).token1(),
+                router.WETH()
+            );
+            uint256 wethBal1 = IERC20(router.WETH()).balanceOf(wethPair1);
+
+            address token;
+            address wethPair;
+            uint256 wethBal;
+
+            if (wethBal0 > wethBal1) {
+                wethPair = wethPair0;
+                wethBal = wethBal0;
+                token = IUniswapV2Pair(lp).token0();
+            } else {
+                wethPair = wethPair1;
+                wethBal = wethBal0;
+                token = IUniswapV2Pair(lp).token1();
+            }
+
+            uint256 wethPerToken = wdiv(wethBal, IERC20(token).balanceOf(wethPair));
+            uint256 tokenAmountPool = wmul(portionLp, IERC20(token).balanceOf(lp));
+
+            value = wmul(wethPerToken, tokenAmountPool).mul(2);
+        }
+        return value;
+    }
+
+    // TODO: return APY for pool
+    // make sure this also works for restaking pools
+    function apy(uint256 _pid) external view returns (uint256) {
+        /*
+            APY is:
+
+                price <- of reward token, in eth
+                * rewards per block
+                * blocks per year
+                * pool weight <- allocPoint / totalAllocPoint
+                / total weth value <- this is the total weth balance of the pool * 2
+
+
+                or
+                (
+                    token price
+                    * (rewards per block * blocks per year) / total pool weight
+                    / token * 2 / 1e18
+                )
+                * 100
+                * allocPoint
+                / percentage of the supply in the pool
+
+
+        */
+
+        /*
+            get the reward token's price in ETH
+                this would be an internal function.
+
+                get reward-surf address and get surf in LP/reward in LP
+                get surf-eth address and get surf in LP / eth in LP
+                multiply together
+
+                surf.balanceOf(reward-surf-lp) / reward.balanceOf(reward-surf-lp)
+                *
+                surf.balanceOf(surf-eth-lp) / weth.balanceOf(surf-eth-lp)
+        */      
+
+        /* 
+            total weth value of pool
+                get proportion of LP in pool
+                    address(this).balanceOf(lp) / lp.totalSupply()
+                if weth bal > 0:
+                    multiply by double the weth in lp
+                    * weth.balanceOf(lp) * 2
+                else equivalent in weth
+                    get address of token-eth-lp
+                    get token balance in token-eth lp
+                        token.bananceOf(token-eth-lp)
+                    get weth balance in token-eth lp
+                        weth.balanceOf(token-eth-lp)
+                    divide to get weth per token (price in eth)
+                        wethBal / tokenBal = token price
+                    multiply by tokens in lp
+                        *token price * token.balanceOf(lp) * 2
+
+        */
+        uint256 poolWeight = wdiv(poolInfo[_pid].allocPoint, totalAllocPoint);
+        uint rate = wmul(rewardPrice(), tokensPerBlock(phase));
+        rate = wmul(rate, BLOCKS_PER_YEAR);
+        rate = wmul(rate, poolWeight);
+        rate = wdiv(rate, poolValue(_pid));
+        return rate;
     }
 
     // return the active reward token (the phase; either tide or riptide)
