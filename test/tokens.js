@@ -423,7 +423,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal(42);
   });
 
-  it("Wipeout with protection: surfboard", async () => {
+  it("Wipeout protection: surfboard", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: 10000,
@@ -446,7 +446,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
   });
 
-  it("Wipeout with protection: bronze trident, burn clear of floor", async () => {
+  it("Wipeout protection: bronze trident, burn clear of floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -469,7 +469,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
   });
 
-  it("Wipeout with protection: bronze trident, burn intersects floor", async () => {
+  it("Wipeout protection: bronze trident, burn intersects floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -491,7 +491,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal("249600000000000000");
   });
 
-  it("Wipeout with protection: bronze trident, balance under floor", async () => {
+  it("Wipeout protection: bronze trident, balance under floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -554,7 +554,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
   });
 
-  it("Wipeout with protection: silver trident, burn clear of floor", async () => {
+  it("Wipeout protection: silver trident, burn clear of floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -578,7 +578,7 @@ describe("Tide tokens: transfers", () => {
   });
 
 
-  it("Wipeout with protection: silver trident, burn intersects floor", async () => {
+  it("Wipeout protection: silver trident, burn intersects floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -600,7 +600,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal("420000000000000000");
   });
 
-  it("Wipeout with protection: silver trident, balance under floor", async () => {
+  it("Wipeout protection: silver trident, balance under floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -663,7 +663,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal(resultantRiptide.toString());
   });
 
-  it("Wipeout with protection: gold trident, burn clear of floor", async () => {
+  it("Wipeout protection: gold trident, burn clear of floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -687,7 +687,7 @@ describe("Tide tokens: transfers", () => {
   });
 
 
-  it("Wipeout with protection: gold trident, burn intersects floor", async () => {
+  it("Wipeout protection: gold trident, burn intersects floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",
@@ -709,7 +709,7 @@ describe("Tide tokens: transfers", () => {
     expect(await riptide.balanceOf(user.bob.address)).to.equal("690000000000000000");
   });
 
-  it("Wipeout with protection: gold trident, balance under floor", async () => {
+  it("Wipeout protection: gold trident, balance under floor", async () => {
     const p = {
       addr: mock.erc20.address,
       txAmount: "1000000000000000000",

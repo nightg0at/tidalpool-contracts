@@ -27,8 +27,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
   IERC20 public surf;
   IUniswapV2Router02 public router;
-  IERC20 public weth;
-  address public factory;
   TokenInfo[2] public t;
 
   uint public delayWarning;
@@ -64,8 +62,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     t[1] = TokenInfo(_riptide, 0, false);
     surf = _surf;
     router = _router;
-    weth = IERC20(router.WETH());
-    factory = router.factory();
     delayWarning = _delayWarning;
   }
 
@@ -107,11 +103,15 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     }
 
     address[] memory surfPath = new address[](2);
-    surfPath[0] = address(weth);
+    surfPath[0] = router.WETH();
     surfPath[1] = address(surf);
 
     // get how many surf we need from uniswap
-    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(factory, msg.value, surfPath);
+    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(
+      router.factory(),
+      msg.value,
+      surfPath
+    );
     uint surfAmount = _buyPrep(outputEstimate[1], _tid);
     uint surfBalBefore = surf.balanceOf(address(this));
     uint ethBalBefore = sub(address(this).balance, msg.value);

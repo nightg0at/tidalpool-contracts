@@ -61,7 +61,7 @@ contract Poseidon is Ownable, DSMath {
     struct PoolInfo {
         IERC20 lpToken;           // Address of LP token contract.
         uint256 allocPoint;       // How many allocation points assigned to this pool. SUSHIs to distribute per block.
-        uint256 withdrawTax; // Amount of LP liquidated on withdraw (often 0)
+        uint256 withdrawFee; // Amount of LP liquidated on withdraw (often 0)
         uint256 lastRewardBlock;  // Last block number that SUSHIs distribution occurs.
         uint256 accTidalPerShare; // Accumulated SUSHIs per share, times 1e12. See below.
         uint256 accRiptidePerShare; // Accumulated SUSHIs per share, times 1e12. See below.
@@ -80,6 +80,8 @@ contract Poseidon is Ownable, DSMath {
 
     // Dev address.
     address public devaddr;
+    // Fee address
+    address public feeaddr;
     // Block number when bonus SUSHI period ends.
     //uint256 public bonusEndBlock;
     // SUSHI tokens created per block.
@@ -114,6 +116,9 @@ contract Poseidon is Ownable, DSMath {
     // weather god
     address zeus;
 
+    // surf and whirlpool
+    address surf;
+    address whirlpool;
 
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
@@ -125,6 +130,8 @@ contract Poseidon is Ownable, DSMath {
         ITideToken _tidal,
         ITideToken _riptide,
         address _rewardEthPath,
+        address _surf,
+        address _whirlpool,
         address _devaddr,
         uint256 _startBlock
     ) public {
@@ -134,6 +141,8 @@ contract Poseidon is Ownable, DSMath {
         corePid[address(_riptide)] = 1;
         ethPath[address(_tidal)] = _rewardEthPath;
         ethPath[address(_riptide)] = _rewardEthPath;
+        surf = _surf;
+        whirlpool = _whirlpool;
         devaddr = _devaddr;
         startBlock = _startBlock;
         phase = address(_tidal);
@@ -159,7 +168,7 @@ contract Poseidon is Ownable, DSMath {
     // Add a new lp to the pool. Can only be called by the owner.
     // This is assumed to not be a restaking pool.
     // Restaking can be added later or with addWithRestaking() instead of add()
-    function add(uint256 _allocPoint, IERC20 _lpToken, uint256 _withdrawTax, bool _withUpdate) public onlyOwner {
+    function add(uint256 _allocPoint, IERC20 _lpToken, uint256 _withdrawFee, bool _withUpdate) public onlyOwner {
         require(poolIsAdded[address(_lpToken)] == false, 'add: pool already added');
         poolIsAdded[address(_lpToken)] = true;
 
@@ -171,7 +180,7 @@ contract Poseidon is Ownable, DSMath {
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             allocPoint: _allocPoint,
-            withdrawTax: _withdrawTax,
+            withdrawFee: _withdrawFee,
             lastRewardBlock: lastRewardBlock,
             accTidalPerShare: 0,
             accRiptidePerShare: 0,
@@ -182,7 +191,7 @@ contract Poseidon is Ownable, DSMath {
     }
 
     // Add a new lp to the pool that uses restaking. Can only be called by the owner.
-    function addWithRestaking(uint256 _allocPoint, uint256 _withdrawTax, bool _withUpdate, IStakingAdapter _adapter) public onlyOwner validAdapter(_adapter) {
+    function addWithRestaking(uint256 _allocPoint, uint256 _withdrawFee, bool _withUpdate, IStakingAdapter _adapter) public onlyOwner validAdapter(_adapter) {
         IERC20 _lpToken = IERC20(_adapter.lpTokenAddress());
 
         require(poolIsAdded[address(_lpToken)] == false, 'add: pool already added');
@@ -197,7 +206,7 @@ contract Poseidon is Ownable, DSMath {
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             allocPoint: _allocPoint,
-            withdrawTax: _withdrawTax,
+            withdrawFee: _withdrawFee,
             lastRewardBlock: lastRewardBlock,
             accTidalPerShare: 0,
             accRiptidePerShare: 0,
@@ -265,6 +274,12 @@ contract Poseidon is Ownable, DSMath {
 
     function setRewardPerBlock(uint256 _newReward) public onlyOwner {
         baseRewardPerBlock = _newReward;
+    }
+
+    // used if surf.finance upgrade their contracts
+    function setSurfConfig(address _newSurf, address _newWhirlpool) public onlyOwner {
+        surf = _newSurf;
+        whirlpool = _newWhirlpool;
     }
 
 
@@ -450,20 +465,6 @@ contract Poseidon is Ownable, DSMath {
     }
 
 
-    /*
-        TODO
-
-        "
-        Withdraw fees:
-	    People who withdraw from the tidal/surf or the riptide/surf liquidity pool
-        will see 10% of their lp tokens taxed. The lp tokens are split into
-        tidal/riptide and surf. The tidal/riptide tokens are used to buy surf, and
-        all of the surf tokens are sent to the whirlpool.
-        "
-
-    */
-
-
     // Withdraw LP tokens from MasterChef.
     function withdraw(uint256 _pid, uint256 _amount) public {
         PoolInfo storage pool = poolInfo[_pid];
@@ -480,11 +481,17 @@ contract Poseidon is Ownable, DSMath {
         }
         uint256 otherPending = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
         if(_amount > 0) {
-            user.amount = user.amount.sub(_amount);
+            uint256 amount = _amount;
+            user.amount = user.amount.sub(amount);
             if (isRestaking(_pid)) {
-                pool.adapter.withdraw(_amount);
+                pool.adapter.withdraw(amount);
             }
-            pool.lpToken.safeTransfer(address(msg.sender), _amount);
+            if (pool.withdrawFee > 0) {
+                uint256 fee = wmul(amount, pool.withdrawFee);
+                amount = amount.sub(fee);
+                processWithdrawFee(address(pool.lpToken), fee);
+            }
+            pool.lpToken.safeTransfer(address(msg.sender), amount);
         }
         //  we can't guarantee we have the tokens until after adapter.withdraw()
         if (otherPending > 0) {
@@ -494,6 +501,53 @@ contract Poseidon is Ownable, DSMath {
         user.riptideRewardDebt = user.amount.mul(pool.accRiptidePerShare).div(1e12);
         user.otherRewardDebt = user.amount.mul(pool.accOtherPerShare).div(1e12);
         emit Withdraw(msg.sender, _pid, _amount);
+    }
+
+    function processWithdrawFee(address _lpToken, uint256 _fee) private {
+        // get token addresses & balances
+        address token0 = IUniswapV2Pair(_lpToken).token0();
+        uint256 token0BalanceBefore = IERC20(token0).balanceOf(address(this));
+
+        address token1 = IUniswapV2Pair(_lpToken).token1();
+        uint256 token1BalanceBefore = IERC20(token1).balanceOf(address(this));
+
+        // remove liquidity
+        IERC20(_lpToken).approve(address(router), _fee);
+        router.removeLiquidity(token0, token1, _fee, 0, 0, address(this), block.timestamp);
+        IERC20(_lpToken).approve(address(router), 0);
+
+        uint256 token0BalanceAfter = IERC20(token0).balanceOf(address(this));
+        uint256 token1BalanceAfter = IERC20(token1).balanceOf(address(this));
+
+        address[] memory surfPath = new address[](2);
+        surfPath[1] = surf;
+
+        // sell and transfer
+        if (token0 == surf) {
+            surfPath[0] = token1;
+            router.swapExactTokensForTokens(
+                token1BalanceAfter.sub(token1BalanceBefore),
+                0,
+                surfPath,
+                whirlpool,
+                block.timestamp
+            );
+            IERC20(token0).transfer(whirlpool, token0BalanceAfter.sub(token0BalanceBefore));
+        } else if (token1 == surf) {
+            surfPath[0] = token0;
+            router.swapExactTokensForTokens(
+                token0BalanceAfter.sub(token0BalanceBefore),
+                0,
+                surfPath,
+                whirlpool,
+                block.timestamp
+            );
+            IERC20(token1).transfer(whirlpool, token1BalanceAfter.sub(token1BalanceBefore));
+        } else {
+            // this is not a reward/surf pair. Transfer to fee wallet
+            IERC20(token0).transfer(feeaddr, token0BalanceAfter.sub(token0BalanceBefore));
+            IERC20(token1).transfer(feeaddr, token1BalanceAfter.sub(token1BalanceBefore));
+        }
     }
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
@@ -506,6 +560,11 @@ contract Poseidon is Ownable, DSMath {
         user.riptideRewardDebt = 0;
         if (isRestaking(_pid)) {
             pool.adapter.withdraw(amount);
+        }
+        if (pool.withdrawFee > 0) {
+            uint256 fee = wmul(amount, pool.withdrawFee);
+            amount = amount.sub(fee);
+            pool.lpToken.transfer(feeaddr, fee);
         }
         pool.lpToken.safeTransfer(address(msg.sender), amount);
         emit EmergencyWithdraw(msg.sender, _pid, amount);
@@ -548,6 +607,11 @@ contract Poseidon is Ownable, DSMath {
     function dev(address _devaddr) public {
         require(msg.sender == devaddr, "dev: wut?");
         devaddr = _devaddr;
+    }
+
+    // Update withdraw fee recipient
+    function fee(address _feeaddr) public onlyOwner {
+        feeaddr = _feeaddr;
     }
 
     // return the current reward token's current price in ETH
