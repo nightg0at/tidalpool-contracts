@@ -26,6 +26,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
   IERC20 public surf;
+  address public surfEth; // uniswap pair
   IUniswapV2Router02 public router;
   TokenInfo[2] public t;
 
@@ -56,12 +57,14 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     TideToken _riptide,
     IERC20 _surf,
     IUniswapV2Router02 _router,
+    address _surfETH,
     uint _delayWarning // 6500 is 1 day
   ) public {
     t[0] = TokenInfo(_tidal, 0, false);
     t[1] = TokenInfo(_riptide, 0, false);
     surf = _surf;
     router = _router;
+    surfEth = _surfETH; //UniswapV2Library.pairFor(router.factory(), router.WETH(), address(surf));
     delayWarning = _delayWarning;
   }
 
@@ -107,12 +110,20 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     surfPath[1] = address(surf);
 
     // get how many surf we need from uniswap
+    /*
     uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(
       router.factory(),
       msg.value,
       surfPath
     );
     uint surfAmount = _buyPrep(outputEstimate[1], _tid);
+    */
+    uint outputEstimate = UniswapV2Library.getAmountOut(
+      msg.value,
+      IERC20(router.WETH()).balanceOf(surfEth),
+      surf.balanceOf(surfEth)
+    );
+    uint surfAmount = _buyPrep(outputEstimate, _tid);
     uint surfBalBefore = surf.balanceOf(address(this));
     uint ethBalBefore = sub(address(this).balance, msg.value);
     router.swapETHForExactTokens{value: msg.value}(

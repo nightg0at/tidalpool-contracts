@@ -19,17 +19,21 @@ async function main(provider) {
       owner,
       require("../artifacts/contracts/Poseidon.sol/Poseidon.json").abi
     ),
-    erc20: await deployMockContract(
+    surf: await deployMockContract(
+      owner,
+      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
+    ),
+    surfEth: await deployMockContract(
+      owner,
+      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
+    ),
+    weth: await deployMockContract(
       owner,
       require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
     ),
     registry: await deployMockContract(
       owner,
       require("../artifacts/@openzeppelin/contracts/introspection/IERC1820Registry.sol/IERC1820Registry.json").abi
-    ),
-    uniswapPair: await deployMockContract(
-      owner,
-      require("../artifacts/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol/IUniswapV2Pair.json").abi
     ),
     router: await deployMockContract(
       owner,
@@ -48,16 +52,18 @@ async function main(provider) {
 
   await parent.setAddresses(tidal.address, riptide.address, mock.poseidon.address);
 
-  await mock.router.mock.WETH.returns("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+  await mock.router.mock.WETH.returns(mock.weth.address);
   await mock.router.mock.factory.returns("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f");
-  await mock.router.mock.swapETHForExactTokens.returns([0,0,0]);
+  await mock.router.mock.swapETHForExactTokens.returns([0,0,0]); // return not used
+
 
   const Sale = await ethers.getContractFactory("contracts/Sale.sol:Sale");    
   const sale = await Sale.deploy(
     tidal.address,
     riptide.address,
-    mock.erc20.address, //surf dummy
+    mock.surf.address,
     mock.router.address,
+    mock.surfEth.address,
     10
   );
 
