@@ -15,6 +15,7 @@ import "./libraries/UniswapV2Library.sol";
 import "./ds-math/math.sol";
 import "./TideToken.sol";
 
+import "hardhat/console.sol";
 
 contract Sale is Ownable, ReentrancyGuard, DSMath {
 
@@ -22,7 +23,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     TideToken token;
     uint sold;
     mapping(address => uint) balance;
-    bool unlocked;
   }
 
   IERC20 public surf;
@@ -31,14 +31,15 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   TokenInfo[2] public t;
 
   uint public delayWarning;
+  uint public startBlock;
+  uint public finishBlock;
 
   uint public amountForSale = 42e17; // 4.2 of tidal and riptide each
   uint public SurfRaise = 1e22; // 10k surf in total
   uint public rate = wdiv(amountForSale, SurfRaise);
-  uint public maxTokens =  3e18; // 3k surf?
+  uint public maxTokensPerUser =  3e18; // 3 for dev, but TBC
   uint public constant INVERSE_SURF_FEE_PERCENT = 99e16; // the inverse of the 1% surf transfer fee
-  uint public startBlock = 1;
-  uint public finishBlock = 2;
+
   /*
     0: not started
     1: started
@@ -58,14 +59,18 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     IERC20 _surf,
     IUniswapV2Router02 _router,
     address _surfETH,
-    uint _delayWarning // 6500 is 1 day
+    uint _delayWarning, // 6500 is 1 day
+    uint _startBlock,
+    uint _finishBlock
   ) public {
-    t[0] = TokenInfo(_tidal, 0, false);
-    t[1] = TokenInfo(_riptide, 0, false);
+    t[0] = TokenInfo(_tidal, 0);
+    t[1] = TokenInfo(_riptide, 0);
     surf = _surf;
     router = _router;
     surfEth = _surfETH; //UniswapV2Library.pairFor(router.factory(), router.WETH(), address(surf));
     delayWarning = _delayWarning;
+    startBlock = _startBlock;
+    finishBlock = _finishBlock;
   }
 
   modifier onlyStage(uint _stage) {
@@ -77,19 +82,20 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     // ignore the router, it might be refunding some change
     if (msg.sender != address(router)) {
       // buy the most available token if ETH is sent with no data
-      t[0].sold < t[1].sold ? buyTokensWithEth(0) : buyTokensWithEth(1);
+      // defaults to tidal if equally available
+      t[1].sold < t[0].sold ? buyTokensWithEth(1) : buyTokensWithEth(0);
     }
   }
 
 
   function startAt(uint _startBlock) public onlyOwner onlyStage(0) {
-    require(_startBlock > block.number + delayWarning); // minimum warning ~1 day
+    require(_startBlock > block.number + delayWarning, "SALE::startAt: Not enough warning"); // minimum warning ~1 day
     startBlock = _startBlock;
   }
 
 
   function finishAt(uint _finishBlock) public onlyOwner {
-    require(_finishBlock > block.number + delayWarning); // minimum warning ~1 day
+    require(_finishBlock > block.number + delayWarning, "SALE::finishAt: Not enough warning"); // minimum warning ~1 day
     finishBlock = _finishBlock;
   }
 
@@ -104,41 +110,33 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     if (stage == 0 && startBlock <= block.number) {
       stage = 1;
     }
-
     address[] memory surfPath = new address[](2);
     surfPath[0] = router.WETH();
     surfPath[1] = address(surf);
-
-    // get how many surf we need from uniswap
-    /*
-    uint[] memory outputEstimate = UniswapV2Library.getAmountsOut(
-      router.factory(),
-      msg.value,
-      surfPath
-    );
-    uint surfAmount = _buyPrep(outputEstimate[1], _tid);
-    */
+    
     uint outputEstimate = UniswapV2Library.getAmountOut(
       msg.value,
       IERC20(router.WETH()).balanceOf(surfEth),
       surf.balanceOf(surfEth)
     );
-    uint surfAmount = _buyPrep(outputEstimate, _tid);
-    uint surfBalBefore = surf.balanceOf(address(this));
-    uint ethBalBefore = sub(address(this).balance, msg.value);
-    router.swapETHForExactTokens{value: msg.value}(
-      surfAmount,
+    //console.log("surf::buyTokensWithEth:outputEstimate: %s", outputEstimate);
+    uint surfDesired = _buyPrep(outputEstimate, _tid);
+    //console.log("surf::buyTokensWithEth:surfDesired: %s", surfDesired);
+
+    uint[] memory amounts = router.swapETHForExactTokens{value: msg.value}(
+      surfDesired,
       surfPath,
       address(this),
       block.timestamp
     );
-    
-    if (address(this).balance > ethBalBefore) {
-      msg.sender.transfer(sub(address(this).balance, ethBalBefore));
-    }
 
-    uint surfBalAfter = surf.balanceOf(address(this));
-    surfAmount = sub(surfBalAfter, surfBalBefore);
+    // refund dust
+    //console.log("sale::buyTokensWithEth:msg.value: %s", msg.value);
+    //console.log("sale::buyTokensWithEth:amounts[0]: %s", amounts[0]);
+    if (msg.value > amounts[0]) msg.sender.transfer(sub(msg.value, amounts[0]));
+
+    uint surfAmount = amounts[amounts.length - 1];
+    //console.log("sale::buyTokensWithEth:surfAmount: %s (to be sent to _buyTokens())", surfAmount);
     _buyTokens(surfAmount, _tid);
   }
 
@@ -147,9 +145,11 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     if (stage == 0 && startBlock <= block.number) {
       stage = 1;
     }
-
+  
     uint surfAmount = _buyPrep(_surfAmount, _tid);
+    //console.log("buyTokens: surfAmount: %s", surfAmount);
     uint surfBalBefore = surf.balanceOf(address(this));
+    //console.log("buyTokens: balanceOf(msg.sender): %s", surf.balanceOf(msg.sender));
     surf.transferFrom(msg.sender, address(this), surfAmount);
     uint surfBalAfter = surf.balanceOf(address(this));
     surfAmount = sub(surfBalAfter, surfBalBefore);
@@ -158,31 +158,42 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
 
   function _buyPrep(uint _surfAmount, uint _tid) internal view onlyStage(1) returns (uint) {
+    //console.log("161 _buyPrep: _surfAmount: %s", _surfAmount);
     uint surfAmount = _minusTransferFee(_surfAmount);
-    uint tokenAmount = wmul(_surfAmount, rate);  
+    //console.log("163 _buyPrep: surfAmount: %s", surfAmount);
+    //console.log("164 _buyPrep: rate: %s", rate);
+    uint tokenAmount = wmul(surfAmount, rate);
+    //console.log("166 _buyPrep: tokenAmount: %s", tokenAmount);
     // remaining tokens ceiling
     if (sub(amountForSale, t[_tid].sold) < tokenAmount) {
       tokenAmount = sub(amountForSale, t[_tid].sold);
     }
+    //console.log("171 _buyPrep: tokenAmount: %s", tokenAmount);
     // spending limit ceiling
     uint tokenBalanceAfterBuy = add(tokenAmount, balanceOf(msg.sender, _tid));
-    if (tokenBalanceAfterBuy > maxTokens) {
-      tokenAmount = sub(tokenBalanceAfterBuy, maxTokens);
+    //console.log("174 _buyPrep: tokenBalanceAfterBuy: %s", tokenBalanceAfterBuy);
+    if (tokenBalanceAfterBuy > maxTokensPerUser) {
+      tokenAmount = sub(maxTokensPerUser, balanceOf(msg.sender, _tid));
+      require(tokenAmount > 0, "Purchase limit hit for this token for this user");
     }
-    // update surf amount and reverse the fee
+    //console.log("178 _buyPrep: tokenAmount: %s", tokenAmount);
+    // update surf amount and undo the fee
     surfAmount = wdiv(tokenAmount, rate);
-    surfAmount = _reverseTransferFee(surfAmount);
+    //console.log("181 _buyPrep: surfAmount: %s", surfAmount);
+    surfAmount = _undoTransferFee(surfAmount);
+    //console.log("183 _buyPrep: surfAmount: %s", surfAmount);
     // just in case, but shouldn't happen
     if (surfAmount > _surfAmount) {
       surfAmount = _surfAmount;
     }
+    //console.log("188 _buyPrep: surfAmount: %s", surfAmount);
     return surfAmount;
   }
 
 
   function _buyTokens(uint _surfAmount, uint _tid) internal onlyStage(1) {
     if (finishBlock < block.number) {
-      finish();
+      _finish();
       return;
     }
 
@@ -195,14 +206,14 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
 
     // if both have sold out then finish
     if (t[0].sold >= amountForSale && t[1].sold >= amountForSale) {
-      finish();
+      _finish();
     }
 
     emit BuyTokens(msg.sender, address(t[_tid].token), tokenAmount);
   }
 
 
-  function finish() private {
+  function _finish() private {
     stage = 2;
     finishBlock = block.number;
   }
@@ -216,7 +227,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     surf.approve(address(router), surf.balanceOf(address(this)));
 
     // mint and supply tidal + half surf liquidity
-    t[0].token.mint(address(this), t[0].sold);
+    t[0].token.mint(address(this), mul(t[0].sold, 2)); // double because half belongs to buyers
     t[0].token.approve(address(router), t[0].sold);
     uint surfLiquidity = surf.balanceOf(address(this)) / 2;
     router.addLiquidity(
@@ -231,7 +242,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     );
 
     // mint and supply tidal + half surf liquidity
-    t[1].token.mint(address(this), t[1].sold);
+    t[1].token.mint(address(this), mul(t[1].sold, 2)); // double because half belongs to buyers
     t[1].token.approve(address(router), t[1].sold);
     surfLiquidity = surf.balanceOf(address(this));
     router.addLiquidity(
@@ -245,10 +256,6 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
       block.timestamp
     );
 
-    // enable buyers to withdraw
-    t[0].unlocked = true;
-    t[1].unlocked = true;
-
     stage = 3;
   }
 
@@ -261,15 +268,12 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     t[1].token.transferOwnership(_newTokenOwner);
   }
 
-  function withdraw(address _buyer, uint _tid) external {
-    if (t[_tid].unlocked) {
-      uint amount = t[_tid].balance[_buyer];
-      t[_tid].balance[_buyer] = 0;
-      t[_tid].token.transfer(_buyer, amount);
-      emit Withdraw(_buyer, address(t[_tid].token), amount);
-    } else {
-      revert("SALE::withdraw: Tokens not unlocked");
-    }
+  function withdraw(address _buyer, uint _tid) external onlyStage(3) {
+    uint amount = t[_tid].balance[_buyer];
+    //console.log("sale::withdraw:amount: %s", amount);
+    t[_tid].balance[_buyer] = 0;
+    t[_tid].token.transfer(_buyer, amount);
+    emit Withdraw(_buyer, address(t[_tid].token), amount);
   }
 
   function balanceOf(address _buyer, uint _tid) public view returns (uint) {
@@ -281,8 +285,8 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     return (stage, rate, amountForSale, t[0].sold, t[1].sold);
   }
 
-  function _reverseTransferFee(uint _inputAmount) internal pure returns (uint) {
-    return mul(wdiv(_inputAmount, INVERSE_SURF_FEE_PERCENT), 100);
+  function _undoTransferFee(uint _inputAmount) internal pure returns (uint) {
+    return wdiv(_inputAmount, INVERSE_SURF_FEE_PERCENT);
   }
 
 
