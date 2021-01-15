@@ -110,15 +110,15 @@ contract Poseidon is Ownable, DSMath {
     uint256 private constant BLOCKS_PER_YEAR = 2336000;
 
     // weather
-    bool stormy = false;
-    uint256 stormDivisor = 2;
+    bool public stormy = false;
+    uint256 public stormDivisor = 2;
 
     // weather god
-    address zeus;
+    address public zeus;
 
     // surf and whirlpool
-    address surf;
-    address whirlpool;
+    address public surf;
+    address public whirlpool;
 
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
@@ -157,7 +157,7 @@ contract Poseidon is Ownable, DSMath {
     }
 
     modifier onlyZeus() {
-        require(msg.sender == zeus);
+        require(msg.sender == zeus, "only zeus can call this method");
         _;
     }
 
@@ -291,7 +291,7 @@ contract Poseidon is Ownable, DSMath {
         ethPath[_rewardToken] = _path;
     }
 
-    function tokensPerBlock(address _tideToken) internal view returns (uint256) {
+    function _tokensPerBlock(address _tideToken) internal view returns (uint256) {
         if (phase == _tideToken) {
             if (stormy) {
                 return baseRewardPerBlock.div(stormDivisor);
@@ -301,6 +301,10 @@ contract Poseidon is Ownable, DSMath {
         } else {
             return 0;
         }
+    }
+
+    function tokensPerBlock(address _tideToken) external view returns (uint256) {
+        return _tokensPerBlock(_tideToken);
     }
 
     // View function to see pending tide tokens on frontend.
@@ -320,9 +324,9 @@ contract Poseidon is Ownable, DSMath {
             uint256 pendingTidal = 0;
             uint256 pendingRiptide = 0;
             if (phase == address(tidal)) {
-                pendingTidal = span.mul(tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
+                pendingTidal = span.mul(_tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
             } else if (phase == address(riptide)) {
-                pendingRiptide = span.mul(tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
+                pendingRiptide = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
             }
             accTidalPerShare = accTidalPerShare.add(pendingTidal.mul(1e12).div(lpSupply));
             accRiptidePerShare = accRiptidePerShare.add(pendingRiptide.mul(1e12).div(lpSupply));
@@ -382,7 +386,7 @@ contract Poseidon is Ownable, DSMath {
 
         uint256 span = block.number.sub(pool.lastRewardBlock);
         if (phase == address(tidal)) {
-            uint256 tidalReward = span.mul(tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
+            uint256 tidalReward = span.mul(_tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
             uint256 devTidalReward = tidalReward.div(devDivisor);
             if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > TIDAL_CAP) {
                 // we would exceed the cap
@@ -403,7 +407,7 @@ contract Poseidon is Ownable, DSMath {
                 tidal.mint(address(this), tidalReward);
             }
         } else {
-            uint256 riptideReward = span.mul(tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
+            uint256 riptideReward = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
             riptide.mint(devaddr, riptideReward.div(devDivisor));
             riptide.mint(address(this), riptideReward);
             pool.accRiptidePerShare = pool.accRiptidePerShare.add(riptideReward.mul(1e12).div(lpSupply));
@@ -582,7 +586,7 @@ contract Poseidon is Ownable, DSMath {
     }
 
 
-    // Safe tide token transfer function, just in case if rounding error causes ool to not have enough tokens of type _tideToken
+    // Safe tide token transfer function, just in case if rounding error causes pool to not have enough tokens of type _tideToken
     function safeTideTransfer(address _to, uint256 _amount, ITideToken _tideToken) internal {
         uint256 tokenBal = _tideToken.balanceOf(address(this));
         if (_amount > tokenBal) {
@@ -742,7 +746,7 @@ contract Poseidon is Ownable, DSMath {
 
         */
         uint256 poolWeight = wdiv(poolInfo[_pid].allocPoint, totalAllocPoint);
-        uint rate = wmul(rewardPrice(), tokensPerBlock(phase));
+        uint rate = wmul(rewardPrice(), _tokensPerBlock(phase));
         rate = wmul(rate, BLOCKS_PER_YEAR);
         rate = wmul(rate, poolWeight);
         rate = wdiv(rate, poolValue(_pid));

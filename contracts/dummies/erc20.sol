@@ -28,3 +28,12 @@ contract Surf is ERC20("surf.finance", "SURF"), Ownable {
     }   
   }
 }
+
+contract Generic is ERC20, Ownable {
+  function mint(address _to, uint256 _amount) public onlyOwner {
+    _mint(_to, _amount);
+  }
+
+  constructor(string memory name) public ERC20(name, name) {}
+
+}
