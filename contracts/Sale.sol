@@ -78,6 +78,11 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
     _;
   }
 
+  modifier lessThanStage(uint _stage) {
+    require(stage < _stage, "SALE::lessThanStage: Stage too high for this method");
+    _;
+  }
+
   receive() external payable {
     // ignore the router, it might be refunding some change
     if (msg.sender != address(router)) {
@@ -94,7 +99,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
 
-  function finishAt(uint _finishBlock) public onlyOwner {
+  function finishAt(uint _finishBlock) public onlyOwner lessThanStage(2) {
     require(_finishBlock > block.number + delayWarning, "SALE::finishAt: Not enough warning"); // minimum warning ~1 day
     finishBlock = _finishBlock;
   }
@@ -106,10 +111,18 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
 
-  function buyTokensWithEth(uint _tid) public nonReentrant payable {
+  function buyTokensWithEth(uint _tid) public nonReentrant payable lessThanStage(2) {
+    if (finishBlock <= block.number) {
+      _finish();
+      return;
+    }
+
     if (stage == 0 && startBlock <= block.number) {
       stage = 1;
     }
+
+    require(stage == 1, "SALE:buyTokensWithEth: Sale not started");
+
     address[] memory surfPath = new address[](2);
     surfPath[0] = router.WETH();
     surfPath[1] = address(surf);
@@ -141,10 +154,18 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
 
-  function buyTokens(uint _surfAmount, uint _tid) public nonReentrant {
+  function buyTokens(uint _surfAmount, uint _tid) public nonReentrant lessThanStage(2) {
+    if (finishBlock <= block.number) {
+      _finish();
+      return;
+    }
+    
     if (stage == 0 && startBlock <= block.number) {
       stage = 1;
     }
+
+    require(stage == 1, "SALE:buyTokens: Sale not started");
+
   
     uint surfAmount = _buyPrep(_surfAmount, _tid);
     //console.log("buyTokens: surfAmount: %s", surfAmount);
@@ -157,7 +178,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
 
-  function _buyPrep(uint _surfAmount, uint _tid) internal view onlyStage(1) returns (uint) {
+  function _buyPrep(uint _surfAmount, uint _tid) internal view returns (uint) {
     //console.log("161 _buyPrep: _surfAmount: %s", _surfAmount);
     uint surfAmount = _minusTransferFee(_surfAmount);
     //console.log("163 _buyPrep: surfAmount: %s", surfAmount);
@@ -191,12 +212,7 @@ contract Sale is Ownable, ReentrancyGuard, DSMath {
   }
 
 
-  function _buyTokens(uint _surfAmount, uint _tid) internal onlyStage(1) {
-    if (finishBlock < block.number) {
-      _finish();
-      return;
-    }
-
+  function _buyTokens(uint _surfAmount, uint _tid) internal {
     uint tokenAmount = wmul(_surfAmount, rate);
 
     // mint tokens and increment counter

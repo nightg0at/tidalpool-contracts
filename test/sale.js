@@ -29,11 +29,7 @@ async function main(provider) {
     poseidon: await deployMockContract(
       owner,
       require("../artifacts/contracts/Poseidon.sol/Poseidon.json").abi
-    ),/*
-    surf: await deployMockContract(
-      owner,
-      require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
-    ),*/
+    ),
     surfEth: await deployMockContract(
       owner,
       require("../artifacts/@openzeppelin/contracts/token/ERC20/ERC20.sol/ERC20.json").abi
@@ -66,15 +62,12 @@ async function main(provider) {
 
   await parent.setAddresses(tidal.address, riptide.address, mock.poseidon.address);
 
-  //await mock.surf.mock.balanceOf.returns(0);
   await mock.surfEth.mock.balanceOf.returns(0);
   await mock.weth.mock.balanceOf.returns(0);
 
   // surf-eth uniswap pair balances 10k:1
   await mock.weth.mock.balanceOf.withArgs(mock.surfEth.address).returns(1000);
   await surf.mint(mock.surfEth.address, 10000000);
-  //await mock.surf.mock.balanceOf.withArgs(mock.surfEth.address).returns(10000000);
-  //await mock.surf.mock.transferFrom.returns(true);
 
   await mock.router.mock.WETH.returns(mock.weth.address);
   await mock.router.mock.factory.returns("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f");
@@ -83,7 +76,6 @@ async function main(provider) {
 
   return {parent, tidal, riptide, surf, owner, user, mock}
 }
-
 
 
 describe("Sale: Before start", () => {
@@ -101,12 +93,12 @@ describe("Sale: Before start", () => {
     sale = await Sale.deploy(
       tidal.address,
       riptide.address,
-      surf.address, //mock.surf.address,
+      surf.address,
       mock.router.address,
       mock.surfEth.address,
       10,
-      100,
-      500
+      500,
+      1000
     );
 
     await tidal.transferOwnership(sale.address);
@@ -146,44 +138,16 @@ describe("Sale: Before start", () => {
     expect(await riptide.owner()).to.equal(sale.address);
   });
 
-  it("Can change sale's start and finish blocks", async () => {
-    expect(await sale.startBlock()).to.equal(100);
-    await sale.startAt(200);
-    expect(await sale.startBlock()).to.equal(200);
-
-    expect(await sale.finishBlock()).to.equal(500);
-    await sale.finishAt(750);
-    expect(await sale.finishBlock()).to.equal(750);
-
-  });
-
   it("Start and finish changes blocked for non-owner", async () => {
     await expect(sale.connect(user.alice).startAt(500)).to.be.revertedWith("Ownable: caller is not the owner");
     await expect(sale.connect(user.alice).finishAt(500)).to.be.revertedWith("Ownable: caller is not the owner");
   });
 
-  it("Start and finish changes must happen before T - delayWarning blocks", async () => {
-    const delay = parseInt(await sale.delayWarning());
-
-    const startBlockOriginal = parseInt(await sale.startBlock());
-    await blockTo(startBlockOriginal - 1);
-    const startBlockNew = startBlockOriginal + delay;
-    await expect(sale.startAt(startBlockNew)).to.be.revertedWith("SALE::startAt: Not enough warning");
-    await sale.startAt(startBlockNew + 2); // we have moved on 1 block so bump 2 to test boundary
-
-    const finishBlockOriginal = parseInt(await sale.finishBlock());
-    await blockTo(finishBlockOriginal - 1);
-    const finishBlockNew = finishBlockOriginal + delay;
-    await expect(sale.finishAt(finishBlockNew)).to.be.revertedWith("SALE::finishAt: Not enough warning");
-    await sale.finishAt(finishBlockNew + 2); // we have moved on 1 block so bump 2 to test boundary
-  });
-
   it("Cannot buy tokens yet", async () => {
-    await expect(owner.sendTransaction({to: sale.address, value: 1})).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
-    await expect(sale.buyTokensWithEth(0, {value: 1})).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
-    //await mock.surf.mock.balanceOf.withArgs(owner.address).returns(1000);
+    await expect(sale.buyTokensWithEth(0, {value: 1})).to.be.revertedWith("SALE:buyTokensWithEth: Sale not started");
+    await expect(owner.sendTransaction({to: sale.address, value: ethers.BigNumber.from("1000000000000000000")})).to.be.revertedWith("SALE:buyTokensWithEth: Sale not started");
     await surf.mint(owner.address, 1000);
-    await expect(sale.buyTokens(500, 0)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
+    await expect(sale.buyTokens(500, 0)).to.be.revertedWith("SALE:buyTokens: Sale not started");
   });
 
   it("Cannot finalize sale", async () => {
@@ -198,7 +162,26 @@ describe("Sale: Before start", () => {
     await expect(sale.withdraw(user.alice.address, 0)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
     await expect(sale.withdraw(user.alice.address, 1)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
   });
+
+  it("Start and finish changes must happen before T - delayWarning blocks", async () => {
+    const delay = parseInt(await sale.delayWarning());
+
+    const startBlockOriginal = parseInt(await sale.startBlock());
+    await blockTo(startBlockOriginal - 1);
+    const startBlockNew = startBlockOriginal + delay;
+    await expect(sale.startAt(startBlockNew)).to.be.revertedWith("SALE::startAt: Not enough warning");
+    await sale.startAt(startBlockNew + 2); // we have moved on 1 block so bump 2 to test boundary
+    expect(await sale.startBlock()).to.equal(startBlockNew + 2);
+
+    const finishBlockOriginal = parseInt(await sale.finishBlock());
+    await blockTo(finishBlockOriginal - 1);
+    const finishBlockNew = finishBlockOriginal + delay;
+    await expect(sale.finishAt(finishBlockNew)).to.be.revertedWith("SALE::finishAt: Not enough warning");
+    await sale.finishAt(finishBlockNew + 2); // we have moved on 1 block so bump 2 to test boundary
+    expect(await sale.finishBlock()).to.equal(finishBlockNew + 2);
+  });
 });
+
 
 describe("Sale: Started", () => {
   beforeEach(async () => {
@@ -228,7 +211,6 @@ describe("Sale: Started", () => {
 
   it("Sale stage moved from 0 to 1 when someone buys after startBlock", async () => {
     expect(await sale.stage()).to.equal(0);
-    //await mock.surf.mock.balanceOf.withArgs(owner.address).returns(1000);
     await surf.mint(owner.address, 1000);
     await sale.buyTokens(500, 0);
     expect(await sale.stage()).to.equal(1);
@@ -278,7 +260,7 @@ describe("Sale: Started", () => {
     expect(await surf.balanceOf(owner.address)).to.equal("3898989898989898989899")
   });
 
-  it("Buy riptide with surf (via method)", async () => {
+  it("Buy riptide with surf", async () => {
     await surf.mint(owner.address, "5000000000000000000");
     await surf.approve(sale.address, "5000000000000000000");
     await sale.buyTokens("5000000000000000000", 1);
@@ -288,7 +270,7 @@ describe("Sale: Started", () => {
     expect(expected).to.equal(bal);
   });
 
-  it("Buy riptide with ETH", async () => {
+  it("Buy riptide with ETH (via method)", async () => {
     // 1 eth in, 500 surf out (*10**18)
     await mock.router.mock.swapETHForExactTokens.returns(
       [
@@ -305,6 +287,25 @@ describe("Sale: Started", () => {
     expect(expected).to.equal(bal);
   });
 
+  it("Most available token bought automatically with ETH (via receive)", async () => {
+    // 1 eth in, 500 surf out (*10**18)
+    await mock.router.mock.swapETHForExactTokens.returns(
+      [
+        "1000000000000000000", // amount used in the sale
+        "1000000000000000000", // intermediary balances if any (at least weth)
+        "495000000000000000000" // tokens bought minus fee
+      ]
+    );
+    await sale.buyTokensWithEth(1, {value: ethers.BigNumber.from("1000000000000000000")});
+    // 500-(500*0.01)*0.00042 = 0.2079
+    const expected = "207900000000000000";
+    expect(expected).to.equal(await sale.balanceOf(owner.address, 1));
+    expect(await sale.balanceOf(owner.address, 0)).to.equal(0);
+    await owner.sendTransaction({to: sale.address, value: ethers.BigNumber.from("1000000000000000000")});
+    // 500-(500*0.01)*0.00042 = 0.2079
+    expect(expected).to.equal(await sale.balanceOf(owner.address, 0));
+
+  });
 
   it("Partial refund because riptide cap has been hit", async () => {
     const surfAmount = "7000000000000000000000";
@@ -339,7 +340,7 @@ describe("Sale: Started", () => {
 
   it("Sale stage moved from 1 to 2 when both caps have been hit", async () => {
     const surfAmount = "10000000000000000000000";
-    
+
     await surf.mint(owner.address, surfAmount);
     await surf.approve(sale.address, surfAmount);
     await sale.buyTokens(surfAmount, 0);
@@ -364,8 +365,8 @@ describe("Sale: Started", () => {
 
   });
 
-
 });
+
 
 describe("Sale: Finished", () => {
   beforeEach(async () => {
@@ -399,6 +400,12 @@ describe("Sale: Finished", () => {
     expect(parseInt(await ethers.provider.getBlockNumber())).to.be.at.least(await sale.finishBlock());
   });
 
+  it("Cannot buy in stage 2", async () => {
+    await sale.buyTokens(0, 0);
+    expect(await sale.stage()).to.equal(2);
+    await expect(sale.buyTokens(0, 0)).to.be.revertedWith("SALE::lessThanStage: Stage too high for this method");
+  });
+
   it("Sale can only be finalized at stage 2", async () => {
     await expect(sale.finalize()).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
     await sale.buyTokens(0, 0);
@@ -420,6 +427,9 @@ describe("Sale: finalized", () => {
     mock = c.mock;
     surf = c.surf;
 
+    start = await ethers.provider.getBlockNumber();
+    end = start + 50;
+
     sale = await (await ethers.getContractFactory("contracts/Sale.sol:Sale")).deploy(
       tidal.address,
       riptide.address,
@@ -427,8 +437,8 @@ describe("Sale: finalized", () => {
       mock.router.address,
       mock.surfEth.address,
       10,
-      1, // start instantly for this test
-      10, // finish quickly for this test
+      start, // start instantly for this test
+      end, // finish quickly for this test
     );
 
     await tidal.transferOwnership(sale.address);
@@ -436,14 +446,22 @@ describe("Sale: finalized", () => {
   });
 
   it("Sale stage moved to 3 when finalized()", async () => {
-    blockTo(10);
+    await blockTo(end);
     await sale.buyTokens(0, 0);
     await sale.finalize();
     expect(await sale.stage()).to.equal(3);
   });
 
+  it("Cannot buy in stage 3", async () => {
+    await blockTo(end);
+    await sale.buyTokens(0, 0);
+    await sale.finalize();
+    expect(await sale.stage()).to.equal(3);
+    await expect(sale.buyTokens(0, 0)).to.be.revertedWith("SALE::lessThanStage: Stage too high for this method");
+  });
+
   it("Tokens can only be withdrawn in stage 3", async () => {
-    blockTo(10);
+    await blockTo(end);
     await expect(sale.withdraw(owner.address, 0)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
     await expect(sale.withdraw(owner.address, 1)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
     await sale.buyTokens(0, 0);
@@ -452,34 +470,38 @@ describe("Sale: finalized", () => {
     await sale.withdraw(owner.address, 1);
   });
 
+
   it("Tokens can only be withdrawn once", async () => {
-
-    // whitelist sale address for this test?
-
+    // whitelist the sale contract for sendBurn and sendWipeout
+    await parent.setWhitelist(sale.address, true, true, false, true, false);
     const surfAmount = "10000000000000000000000";
     await surf.mint(owner.address, surfAmount);
     await surf.approve(sale.address, surfAmount);
+
+    //console.log(await sale.stage());
+    //console.log(await ethers.provider.getBlockNumber());
+    //console.log(ethers.utils.formatUnits(await sale.startBlock(), "wei"));
+    await blockTo(start+1);
     await sale.buyTokens(surfAmount, 0);
-    blockTo(10);
+    await blockTo(end);
     await sale.buyTokens(0, 0);
     await sale.finalize();
     expect(await tidal.balanceOf(owner.address)).to.equal(0);
-    const expected = await sale.balanceOf(owner.address);
+    const expected = await sale.balanceOf(owner.address, 0);
     await sale.withdraw(owner.address, 0);
-    expect(await tidal.balanceOf(owner.address)).to.equal(expected); // or minus fee? sale should be whitelisted
+    expect(await sale.balanceOf(owner.address, 0)).to.equal(0);
+    expect(await tidal.balanceOf(owner.address)).to.equal(expected);
     await sale.withdraw(owner.address, 0);
     expect(await tidal.balanceOf(owner.address)).to.equal(expected);
   });
 
   it("Token ownerships can only be transferred in stage 3", async () => {
-    blockTo(10);
     await expect(sale.transferTokenOwnerships(user.alice.address)).to.be.revertedWith("SALE::onlyStage: Incorrect stage for this method");
+    await blockTo(end);
     await sale.buyTokens(0, 0);
     await sale.finalize();
     expect(await sale.stage()).to.equal(3);
     await sale.transferTokenOwnerships(user.alice.address);
   });
 
-
-})
-
+});
