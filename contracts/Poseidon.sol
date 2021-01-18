@@ -396,15 +396,18 @@ contract Poseidon is Ownable, DSMath {
                 uint256 newTidalReward = totalTidalReward.sub(newDevTidalReward);
                 tidal.mint(devaddr, newDevTidalReward); 
                 tidal.mint(address(this), newTidalReward);
+                pool.accTidalPerShare = pool.accTidalPerShare.add(newTidalReward.mul(1e12).div(lpSupply));
 
                 uint256 totalRiptideReward = tidalReward.sub(totalTidalReward);
                 uint256 newDevRiptideReward = totalRiptideReward.div(devDivisor-1);
                 uint256 newRiptideReward = totalRiptideReward.sub(newDevRiptideReward);
                 riptide.mint(devaddr, newDevRiptideReward);
                 riptide.mint(devaddr, newRiptideReward);
+                pool.accRiptidePerShare = pool.accRiptidePerShare.add(newRiptideReward.mul(1e12).div(lpSupply));
             } else {
                 tidal.mint(devaddr, devTidalReward); 
                 tidal.mint(address(this), tidalReward);
+                pool.accTidalPerShare = pool.accTidalPerShare.add(tidalReward.mul(1e12).div(lpSupply));
             }
         } else {
             uint256 riptideReward = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
@@ -618,139 +621,45 @@ contract Poseidon is Ownable, DSMath {
         feeaddr = _feeaddr;
     }
 
-    // return the current reward token's current price in ETH
-    function rewardPrice() internal view returns (uint256) {
-        address corePair = address(poolInfo[corePid[phase]].lpToken);
-        address otherToken = IUniswapV2Pair(corePair).token0() == phase ? IUniswapV2Pair(corePair).token1() : IUniswapV2Pair(corePair).token0();
-        /*
-            other.balanceOf(phase-other-lp) / phase.balanceOf(phase-other-lp)
-            *
-            other.balanceOf(other-eth-lp) / weth.balanceOf(other-eth-lp)
-        */
-        uint256 price = wmul(
-            wdiv(
-                IERC20(otherToken).balanceOf(corePair),
-                IERC20(phase).balanceOf(corePair)
-            ),
-            wdiv(
-                IERC20(otherToken).balanceOf(ethPath[phase]),
-                IERC20(router.WETH()).balanceOf(ethPath[phase])
-            )
-        );
-        return price;
+    // transfer ownership from this contract to a new owner
+    function transferTokenOwnership(address _owned, address _newOwner) public onlyOwner {
+        Ownable(_owned).transferOwnership(_newOwner);
     }
 
-    // return the total value of the pool in weth
-    function poolValue(uint256 _pid) internal view returns (uint256) {
-        uint256 value = 0;
-        address lp = address(poolInfo[_pid].lpToken);
-        uint256 portionLp = wdiv(
-            IERC20(lp).balanceOf(address(this)),
-            IERC20(lp).totalSupply()
-        );
-        // if the pair contains weth
-        if (IUniswapV2Pair(lp).token0() == router.WETH() || IUniswapV2Pair(lp).token1() == router.WETH()) {
-            // proportion in pool * total weth in LP * 2
-            value = wmul(portionLp, IERC20(router.WETH()).balanceOf(lp)).mul(2);
-        } else {
-            address wethPair0 = IUniswapV2Factory(router.factory()).getPair(
-                IUniswapV2Pair(lp).token0(),
-                router.WETH()
-            );
-            uint256 wethBal0 = IERC20(router.WETH()).balanceOf(wethPair0);
-
-            address wethPair1 = IUniswapV2Factory(router.factory()).getPair(
-                IUniswapV2Pair(lp).token1(),
-                router.WETH()
-            );
-            uint256 wethBal1 = IERC20(router.WETH()).balanceOf(wethPair1);
-
-            address token;
-            address wethPair;
-            uint256 wethBal;
-
-            if (wethBal0 > wethBal1) {
-                wethPair = wethPair0;
-                wethBal = wethBal0;
-                token = IUniswapV2Pair(lp).token0();
-            } else {
-                wethPair = wethPair1;
-                wethBal = wethBal0;
-                token = IUniswapV2Pair(lp).token1();
-            }
-
-            uint256 wethPerToken = wdiv(wethBal, IERC20(token).balanceOf(wethPair));
-            uint256 tokenAmountPool = wmul(portionLp, IERC20(token).balanceOf(lp));
-
-            value = wmul(wethPerToken, tokenAmountPool).mul(2);
-        }
-        return value;
+    /*
+        set a new tidal token
+        before calling, ensure:
+            tokens per block is set to 0 beforehand and reinstated afterwards
+            this is the sibling of tidal
+            poseidon is the owner
+            poseidon's new and old tidal balances match
+    */
+    function setNewTidalToken(
+        address _newTidal,
+        uint256 _newCorePid,
+        address _newRewardEthPath
+    ) public onlyOwner {
+        require(ITideToken(_newTidal).owner() == address(this), "Poseidon not the owner");
+        if (phase == address(tidal)) phase = _newTidal;
+        tidal = ITideToken(_newTidal);
+        corePid[address(tidal)] = _newCorePid;
+        ethPath[address(tidal)] = _newRewardEthPath;
     }
 
-    // TODO: return APY for pool
-    // make sure this also works for restaking pools
-    function apy(uint256 _pid) external view returns (uint256) {
-        /*
-            APY is:
-
-                price <- of reward token, in eth
-                * rewards per block
-                * blocks per year
-                * pool weight <- allocPoint / totalAllocPoint
-                / total weth value <- this is the total weth balance of the pool * 2
-
-
-                or
-                (
-                    token price
-                    * (rewards per block * blocks per year) / total pool weight
-                    / token * 2 / 1e18
-                )
-                * 100
-                * allocPoint
-                / percentage of the supply in the pool
-
-
-        */
-
-        /*
-            get the reward token's price in ETH
-                this would be an internal function.
-
-                get reward-surf address and get surf in LP/reward in LP
-                get surf-eth address and get surf in LP / eth in LP
-                multiply together
-
-                surf.balanceOf(reward-surf-lp) / reward.balanceOf(reward-surf-lp)
-                *
-                surf.balanceOf(surf-eth-lp) / weth.balanceOf(surf-eth-lp)
-        */      
-
-        /* 
-            total weth value of pool
-                get proportion of LP in pool
-                    address(this).balanceOf(lp) / lp.totalSupply()
-                if weth bal > 0:
-                    multiply by double the weth in lp
-                    * weth.balanceOf(lp) * 2
-                else equivalent in weth
-                    get address of token-eth-lp
-                    get token balance in token-eth lp
-                        token.bananceOf(token-eth-lp)
-                    get weth balance in token-eth lp
-                        weth.balanceOf(token-eth-lp)
-                    divide to get weth per token (price in eth)
-                        wethBal / tokenBal = token price
-                    multiply by tokens in lp
-                        *token price * token.balanceOf(lp) * 2
-
-        */
-        uint256 poolWeight = wdiv(poolInfo[_pid].allocPoint, totalAllocPoint);
-        uint rate = wmul(rewardPrice(), _tokensPerBlock(phase));
-        rate = wmul(rate, BLOCKS_PER_YEAR);
-        rate = wmul(rate, poolWeight);
-        rate = wdiv(rate, poolValue(_pid));
-        return rate;
+    /*
+        set a new riptide token
+        before calling, see above
+    */
+    function setNewRiptideToken(
+        address _newRiptide,
+        uint256 _newCorePid,
+        address _newRewardEthPath
+    ) public onlyOwner {
+        require(ITideToken(_newRiptide).owner() == address(this), "Poseidon not the owner");
+        if (phase == address(riptide)) phase = _newRiptide;
+        riptide = ITideToken(_newRiptide);
+        corePid[address(riptide)] = _newCorePid;
+        ethPath[address(riptide)] = _newRewardEthPath;
     }
 
     // return the active reward token (the phase; either tide or riptide)
