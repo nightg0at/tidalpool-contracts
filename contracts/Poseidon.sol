@@ -27,6 +27,8 @@ import "./ds-math/math.sol";
 import "./restaking/interfaces/IStakingAdapter.sol";
 import "./interfaces/ITideToken.sol";
 
+import "hardhat/console.sol";
+
 // MasterChef is the master of Sushi. He can make Sushi and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
@@ -74,9 +76,7 @@ contract Poseidon is Ownable, DSMath {
 
     ITideToken public tidal;
     ITideToken public riptide;
-
-    mapping (address => uint256) public corePid;
-    mapping (address => address) public ethPath;
+    IERC20 public boon;
 
     // Dev address.
     address public devaddr;
@@ -107,7 +107,7 @@ contract Poseidon is Ownable, DSMath {
     uint256 public constant TIDAL_CAP = 69e18;
     uint256 public constant TIDAL_VERTEX = 42e18;
 
-    uint256 private constant BLOCKS_PER_YEAR = 2336000;
+    //uint256 private constant BLOCKS_PER_YEAR = 2336000;
 
     // weather
     bool public stormy = false;
@@ -129,23 +129,23 @@ contract Poseidon is Ownable, DSMath {
         IUniswapV2Router02 _router,
         ITideToken _tidal,
         ITideToken _riptide,
-        address _rewardEthPath,
-        address _surf,
-        address _whirlpool,
+        IERC20 _boon,
+        address _surf, // 0xEa319e87Cf06203DAe107Dd8E5672175e3Ee976c
+        address _whirlpool, // 0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b
         address _devaddr,
         uint256 _startBlock
     ) public {
         router = _router;
         tidal = _tidal;
         riptide = _riptide;
-        corePid[address(_riptide)] = 1;
-        ethPath[address(_tidal)] = _rewardEthPath;
-        ethPath[address(_riptide)] = _rewardEthPath;
+        boon = _boon;
         surf = _surf;
         whirlpool = _whirlpool;
         devaddr = _devaddr;
+        feeaddr = _devaddr;
         startBlock = _startBlock;
         phase = address(_tidal);
+        add(1, boon, 0, false); // seagod's boon added as pool 0
     }
 
     // rudimentary checks for the staking adapter
@@ -282,15 +282,6 @@ contract Poseidon is Ownable, DSMath {
         whirlpool = _newWhirlpool;
     }
 
-
-    // set the reward token's pid and most efficient path to eth
-    // eg if primary tidal pair is tidal/surf then the eth path is the surf/eth uniswap pair
-    function setPricingParams(address _rewardToken, uint256 _pid, address _path) public onlyOwner {
-        require(_rewardToken == address(tidal) || _rewardToken == address(riptide), "invalid token");
-        corePid[_rewardToken] = _pid;
-        ethPath[_rewardToken] = _path;
-    }
-
     function _tokensPerBlock(address _tideToken) internal view returns (uint256) {
         if (phase == _tideToken) {
             if (stormy) {
@@ -386,9 +377,11 @@ contract Poseidon is Ownable, DSMath {
 
         uint256 span = block.number.sub(pool.lastRewardBlock);
         if (phase == address(tidal)) {
+            //console.log("POSEIDON::updatePool(): tidal phase");
             uint256 tidalReward = span.mul(_tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
             uint256 devTidalReward = tidalReward.div(devDivisor);
             if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > TIDAL_CAP) {
+                //console.log("POSEIDON::updatePool(): tidal => riptide switch");
                 // we would exceed the cap
                 uint256 totalTidalReward = TIDAL_CAP.sub(tidal.totalSupply());
                 // split proportionally
@@ -410,10 +403,14 @@ contract Poseidon is Ownable, DSMath {
                 pool.accTidalPerShare = pool.accTidalPerShare.add(tidalReward.mul(1e12).div(lpSupply));
             }
         } else {
+            //console.log("POSEIDON::updatePool(): riptide phase");
             uint256 riptideReward = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
             riptide.mint(devaddr, riptideReward.div(devDivisor));
             riptide.mint(address(this), riptideReward);
             pool.accRiptidePerShare = pool.accRiptidePerShare.add(riptideReward.mul(1e12).div(lpSupply));
+            //console.log("POSEIDON::updatePool():riptideReward: %s", riptideReward);
+            //console.log("POSEIDON::updatePool():pool.accRiptidePerShare: %s", pool.accRiptidePerShare);
+            //console.log("POSEIDON::updatePool():minted %s", riptide.balanceOf(address(this)));
         }
         pool.lastRewardBlock = block.number;
     }
@@ -441,7 +438,7 @@ contract Poseidon is Ownable, DSMath {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
-        uint256 otherPending = 0;
+        uint256 pendingOtherTokens = 0;
         if (user.amount > 0) {
             uint256 pendingTidal = user.amount.mul(pool.accTidalPerShare).div(1e12).sub(user.tidalRewardDebt);
             if(pendingTidal > 0) {
@@ -451,7 +448,7 @@ contract Poseidon is Ownable, DSMath {
             if(pendingRiptide > 0) {
                 safeTideTransfer(msg.sender, pendingRiptide, riptide);
             }
-            otherPending = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
+            pendingOtherTokens = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
         }
         if(_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
@@ -462,8 +459,8 @@ contract Poseidon is Ownable, DSMath {
             user.amount = user.amount.add(_amount);
         }
         // we can't guarantee we have the tokens until after adapter.deposit()
-        if (otherPending > 0) {
-            safeOtherTransfer(msg.sender, otherPending, _pid);
+        if (pendingOtherTokens > 0) {
+            safeOtherTransfer(msg.sender, pendingOtherTokens, _pid);
         }
         user.tidalRewardDebt = user.amount.mul(pool.accTidalPerShare).div(1e12);
         user.riptideRewardDebt = user.amount.mul(pool.accRiptidePerShare).div(1e12);
@@ -479,14 +476,20 @@ contract Poseidon is Ownable, DSMath {
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
         uint256 pendingTidal = user.amount.mul(pool.accTidalPerShare).div(1e12).sub(user.tidalRewardDebt);
+        //console.log("POSEIDON:withdraw:pendingTidal: %s", pendingTidal);
         if(pendingTidal > 0) {
             safeTideTransfer(msg.sender, pendingTidal, tidal);
         }
         uint256 pendingRiptide = user.amount.mul(pool.accRiptidePerShare).div(1e12).sub(user.riptideRewardDebt);
+        //console.log(
+        //    "POSEIDON::withdraw:\n\tuser.amount: %s \n\tpool.accRiptidePerShare: %s \n\tuser.riptideRewardDebt: %s",
+        //    user.amount, pool.accRiptidePerShare, user.riptideRewardDebt);
+        //console.log("POSEIDON::withdraw:pendingRiptide: %s", pendingRiptide);
         if(pendingRiptide > 0) {
-            safeTideTransfer(msg.sender, pendingTidal, riptide);
+            safeTideTransfer(msg.sender, pendingRiptide, riptide);
         }
-        uint256 otherPending = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
+        uint256 pendingOtherTokens = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
+        //console.log("POSEIDON::withdraw:pendingOtherTokens: %s", pendingOtherTokens);
         if(_amount > 0) {
             uint256 amount = _amount;
             user.amount = user.amount.sub(amount);
@@ -501,8 +504,8 @@ contract Poseidon is Ownable, DSMath {
             pool.lpToken.safeTransfer(address(msg.sender), amount);
         }
         //  we can't guarantee we have the tokens until after adapter.withdraw()
-        if (otherPending > 0) {
-            safeOtherTransfer(msg.sender, otherPending, _pid);
+        if (pendingOtherTokens > 0) {
+            safeOtherTransfer(msg.sender, pendingOtherTokens, _pid);
         }
         user.tidalRewardDebt = user.amount.mul(pool.accTidalPerShare).div(1e12);
         user.riptideRewardDebt = user.amount.mul(pool.accRiptidePerShare).div(1e12);
@@ -513,18 +516,18 @@ contract Poseidon is Ownable, DSMath {
     function processWithdrawFee(address _lpToken, uint256 _fee) private {
         // get token addresses & balances
         address token0 = IUniswapV2Pair(_lpToken).token0();
-        uint256 token0BalanceBefore = IERC20(token0).balanceOf(address(this));
+        //uint256 token0BalanceBefore = IERC20(token0).balanceOf(address(this));
 
         address token1 = IUniswapV2Pair(_lpToken).token1();
-        uint256 token1BalanceBefore = IERC20(token1).balanceOf(address(this));
+        //uint256 token1BalanceBefore = IERC20(token1).balanceOf(address(this));
 
         // remove liquidity
         IERC20(_lpToken).approve(address(router), _fee);
-        router.removeLiquidity(token0, token1, _fee, 0, 0, address(this), block.timestamp);
+        (uint256 token0Amount, uint256 token1Amount) = router.removeLiquidity(token0, token1, _fee, 0, 0, address(this), block.timestamp);
         IERC20(_lpToken).approve(address(router), 0);
 
-        uint256 token0BalanceAfter = IERC20(token0).balanceOf(address(this));
-        uint256 token1BalanceAfter = IERC20(token1).balanceOf(address(this));
+        //uint256 token0BalanceAfter = IERC20(token0).balanceOf(address(this));
+        //uint256 token1BalanceAfter = IERC20(token1).balanceOf(address(this));
 
         address[] memory surfPath = new address[](2);
         surfPath[1] = surf;
@@ -533,27 +536,27 @@ contract Poseidon is Ownable, DSMath {
         if (token0 == surf) {
             surfPath[0] = token1;
             router.swapExactTokensForTokens(
-                token1BalanceAfter.sub(token1BalanceBefore),
+                token1Amount,
                 0,
                 surfPath,
                 whirlpool,
                 block.timestamp
             );
-            IERC20(token0).transfer(whirlpool, token0BalanceAfter.sub(token0BalanceBefore));
+            IERC20(token0).transfer(whirlpool, token0Amount);
         } else if (token1 == surf) {
             surfPath[0] = token0;
             router.swapExactTokensForTokens(
-                token0BalanceAfter.sub(token0BalanceBefore),
+                token0Amount,
                 0,
                 surfPath,
                 whirlpool,
                 block.timestamp
             );
-            IERC20(token1).transfer(whirlpool, token1BalanceAfter.sub(token1BalanceBefore));
+            IERC20(token1).transfer(whirlpool, token1Amount);
         } else {
             // this is not a reward/surf pair. Transfer to fee wallet
-            IERC20(token0).transfer(feeaddr, token0BalanceAfter.sub(token0BalanceBefore));
-            IERC20(token1).transfer(feeaddr, token1BalanceAfter.sub(token1BalanceBefore));
+            IERC20(token0).transfer(feeaddr, token0Amount);
+            IERC20(token1).transfer(feeaddr, token1Amount);
         }
     }
 
@@ -630,36 +633,24 @@ contract Poseidon is Ownable, DSMath {
         set a new tidal token
         before calling, ensure:
             tokens per block is set to 0 beforehand and reinstated afterwards
-            this is the sibling of tidal
+            this is the sibling of riptide
             poseidon is the owner
             poseidon's new and old tidal balances match
     */
-    function setNewTidalToken(
-        address _newTidal,
-        uint256 _newCorePid,
-        address _newRewardEthPath
-    ) public onlyOwner {
+    function setNewTidalToken(address _newTidal) public onlyOwner {
         require(ITideToken(_newTidal).owner() == address(this), "Poseidon not the owner");
         if (phase == address(tidal)) phase = _newTidal;
         tidal = ITideToken(_newTidal);
-        corePid[address(tidal)] = _newCorePid;
-        ethPath[address(tidal)] = _newRewardEthPath;
     }
 
     /*
         set a new riptide token
         before calling, see above
     */
-    function setNewRiptideToken(
-        address _newRiptide,
-        uint256 _newCorePid,
-        address _newRewardEthPath
-    ) public onlyOwner {
+    function setNewRiptideToken(address _newRiptide) public onlyOwner {
         require(ITideToken(_newRiptide).owner() == address(this), "Poseidon not the owner");
         if (phase == address(riptide)) phase = _newRiptide;
         riptide = ITideToken(_newRiptide);
-        corePid[address(riptide)] = _newCorePid;
-        ethPath[address(riptide)] = _newRewardEthPath;
     }
 
     // return the active reward token (the phase; either tide or riptide)
@@ -669,15 +660,25 @@ contract Poseidon is Ownable, DSMath {
 
     // called every pool update.
     function updatePhase() internal {
+        //console.log("POSEIDON::updatePhase(): tidal.totalSupply(): %s, TIDAL_CAP: %s, TIDAL_VERTEX: %s", tidal.totalSupply(), TIDAL_CAP, TIDAL_VERTEX);
         if (phase == address(tidal) && tidal.totalSupply() >= TIDAL_CAP){
+            // disable boon airdrop farming after cap is hit
+            if (poolInfo[0].allocPoint > 0) {
+                PoolInfo storage pool = poolInfo[0];
+                pool.allocPoint = 0;
+            }
+            //console.log("POSEIDON::updatePhase(): tidal => riptide");
             phase = address(riptide);
         }
         else if (phase == address(riptide) && tidal.totalSupply() < TIDAL_VERTEX) {
+            //console.log("POSEIDON::updatePhase(): riptide => tidal");
             phase = address(tidal);
         }
     }
 
+    /* unused
     function togglePhase() internal {
         phase = phase == address(tidal) ? address(riptide) : address(tidal);
     }
+    */
 }

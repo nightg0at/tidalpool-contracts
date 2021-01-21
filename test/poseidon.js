@@ -4,6 +4,7 @@ const { loadFixture } = waffle;
 const provider = waffle.provider;
 const { isCallTrace } = require("hardhat/internal/hardhat-network/stack-traces/message-trace");
 const { deployMockContract } = require("ethereum-waffle");
+const { experimentalAddHardhatNetworkMessageTraceHook } = require("hardhat/config");
 
 
 async function blockTo(endBlock, verbose = false) {
@@ -45,8 +46,7 @@ async function main(provider) {
     router: await deployMockContract(
       owner,
       require("../artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json").abi
-    ),
-
+    )
   }
 /*
   const Surf = await ethers.getContractFactory("contracts/dummies/erc20.sol:Surf");
@@ -59,25 +59,31 @@ async function main(provider) {
   const tidal = await Token.deploy("Tidal Token", "TIDAL", parent.address);
   const riptide = await Token.deploy("Riptide Token", "RIPTIDE", parent.address);
 
-  const Poseidon = await ethers.getContractFactory("contracts/Poseidon.sol:Poseidon");
-  const poseidon = await Poseidon.deploy(
-    mock.router.address,
-    tidal.address,
-    riptide.address,
-    mock.surfEth.address,
-    mock.surf.address,
-    "0x0000000000000000000000000000000000000001",
-    owner.address,
-    1
-  );
+  const boon = await (await ethers.getContractFactory("contracts/BoonToken.sol:BoonToken")).deploy();
 
   const generic = [
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("zero"),
     await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("one"),
     await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("two"),
     await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("three"),
     await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("four"),
     await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("five"),
   ]
+
+  const lp = await (await ethers.getContractFactory("contracts/dummies/UniswapV2Pair.sol:UniswapV2Pair")).deploy();
+
+  const Poseidon = await ethers.getContractFactory("contracts/Poseidon.sol:Poseidon");
+  const poseidon = await Poseidon.deploy(
+    mock.router.address,
+    tidal.address,
+    riptide.address,
+    boon.address,
+    generic[5].address, // mock surf
+    "0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b",
+    owner.address,
+    1
+  );
+
 
   await tidal.transferOwnership(poseidon.address);
   await riptide.transferOwnership(poseidon.address);
@@ -98,12 +104,10 @@ async function main(provider) {
   await mock.router.mock.swapETHForExactTokens.returns([0,0,0]);
   await mock.router.mock.addLiquidity.returns(0,0,0);
   */
+  await mock.router.mock.removeLiquidity.returns(0, 0);
 
-  return {parent, tidal, riptide, poseidon, owner, user, mock, generic}
+  return {parent, tidal, riptide, boon, poseidon, owner, user, mock, generic, lp}
 }
-
-
-// ownership stuff here
 
 describe("Ownership and migration", () => {
   beforeEach(async () => {
@@ -117,7 +121,7 @@ describe("Ownership and migration", () => {
     mock = c.mock;
     generic = c.generic
   });
-/*
+
   it("Poseidon is the owner of tidal and riptide", async() => {
     expect(await tidal.owner()).to.equal(poseidon.address);
     expect(await riptide.owner()).to.equal(poseidon.address);
@@ -128,11 +132,11 @@ describe("Ownership and migration", () => {
     await poseidon.transferTokenOwnership(tidal.address, user.alice.address);
     expect(await tidal.owner()).to.equal(user.alice.address);
   });
-*/
+
   it("Migration: Tidal can be fully replaced in phase", async() => {
     const d = {
       token: generic[0],
-      pid: 0,
+      pid: 1,
       lp: generic[1]
     }
     await poseidon.add(100, d.lp.address, 0, true);
@@ -141,11 +145,7 @@ describe("Ownership and migration", () => {
     expect(await poseidon.getPhase()).to.equal(tidal.address);
 
     await d.token.transferOwnership(poseidon.address);
-    await poseidon.setNewTidalToken(d.token.address, d.pid, d.lp.address);
-    const corePid = await poseidon.corePid(d.token.address);
-    const poolInfo = await poseidon.poolInfo(corePid);
-    expect(corePid).to.equal(d.pid);
-    expect(await poseidon.ethPath(d.token.address)).to.equal(poolInfo.lpToken);
+    await poseidon.setNewTidalToken(d.token.address);
     expect(await poseidon.tidal()).to.equal(d.token.address);
     expect(await poseidon.getPhase()).to.equal(d.token.address);
 
@@ -160,11 +160,10 @@ describe("Ownership and migration", () => {
     expect(await riptide.balanceOf(user.alice.address)).to.equal(0);
   });
 
-
   it("Migration: Tidal can be fully replaced out of phase", async() => {
     const d = {
       token: generic[0],
-      pid: 0,
+      pid: 1,
       lp: generic[1]
     }
     await poseidon.add(100, d.lp.address, 0, true);
@@ -176,12 +175,9 @@ describe("Ownership and migration", () => {
     await poseidon.updatePool(0);
     expect(await poseidon.getPhase()).to.equal(riptide.address);
 
+    await d.token.mint(user.bob.address, await tidal.totalSupply());
     await d.token.transferOwnership(poseidon.address);
-    await poseidon.setNewTidalToken(d.token.address, d.pid, d.lp.address);
-    const corePid = await poseidon.corePid(d.token.address);
-    const poolInfo = await poseidon.poolInfo(corePid);
-    expect(corePid).to.equal(d.pid);
-    expect(await poseidon.ethPath(d.token.address)).to.equal(poolInfo.lpToken);
+    await poseidon.setNewTidalToken(d.token.address);
     expect(await poseidon.tidal()).to.equal(d.token.address);
     expect(await poseidon.getPhase()).to.equal(riptide.address);
 
@@ -192,14 +188,72 @@ describe("Ownership and migration", () => {
     expect(await riptide.balanceOf(user.alice.address)).to.equal(0);
     await blockTo(50);
     await poseidon.connect(user.alice).withdraw(d.pid, 0);
+    expect(await poseidon.getPhase()).to.equal(riptide.address);
     expect(await d.token.balanceOf(user.alice.address)).to.equal(0);
     expect(await riptide.balanceOf(user.alice.address)).to.be.gt(0);
   
   });
 
+  it("Migration: Riptide can be fully replaced in phase", async() => {
+    const d = {
+      token: generic[0],
+      pid: 1,
+      lp: generic[1]
+    }
+    await poseidon.add(100, d.lp.address, 0, true);
+
+    await poseidon.transferTokenOwnership(tidal.address, owner.address);
+    await tidal.mint(user.bob.address, await poseidon.TIDAL_CAP());
+    await tidal.transferOwnership(poseidon.address);
+    await poseidon.updatePool(0);
+    expect(await poseidon.getPhase()).to.equal(riptide.address);
+
+    await d.token.transferOwnership(poseidon.address);
+    await poseidon.setNewRiptideToken(d.token.address);
+    expect(await poseidon.riptide()).to.equal(d.token.address);
+    expect(await poseidon.getPhase()).to.equal(d.token.address);
+
+    await d.lp.mint(user.alice.address, 100);
+    await d.lp.connect(user.alice).approve(poseidon.address, 100);
+    await poseidon.connect(user.alice).deposit(d.pid, 100);
+    expect(await d.token.balanceOf(user.alice.address)).to.equal(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+    await blockTo(50);
+    await poseidon.connect(user.alice).withdraw(d.pid, 0);
+    expect(await d.token.balanceOf(user.alice.address)).to.be.gt(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+  });
+
+  it("Migration: Riptide can be fully replaced out of phase", async() => {
+    const d = {
+      token: generic[0],
+      pid: 1,
+      lp: generic[1]
+    }
+    await poseidon.add(100, d.lp.address, 0, true);
+
+    expect(await poseidon.tidal()).to.equal(tidal.address);
+
+    await d.token.transferOwnership(poseidon.address);
+    await poseidon.setNewRiptideToken(d.token.address);
+    expect(await poseidon.riptide()).to.equal(d.token.address);
+    expect(await poseidon.getPhase()).to.equal(tidal.address);
+
+    await d.lp.mint(user.alice.address, 100);
+    await d.lp.connect(user.alice).approve(poseidon.address, 100);
+    await poseidon.connect(user.alice).deposit(d.pid, 100);
+    expect(await d.token.balanceOf(user.alice.address)).to.equal(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+    await blockTo(50);
+    await poseidon.connect(user.alice).withdraw(d.pid, 0);
+    expect(await poseidon.getPhase()).to.equal(tidal.address);
+    expect(await d.token.balanceOf(user.alice.address)).to.equal(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.be.gt(0);
+  });
+
 })
 
-/*
+
 describe("Weather", () => {
   beforeEach(async () => {
     c = await loadFixture(main);
@@ -243,7 +297,7 @@ describe("Weather", () => {
 
 });
 
-describe("Withdraw fee", () => {
+describe("Withdraw", () => {
   beforeEach(async () => {
     c = await loadFixture(main);
     parent = c.parent;
@@ -253,7 +307,8 @@ describe("Withdraw fee", () => {
     owner = c.owner;
     user = c.user;
     mock = c.mock;
-    generic = c.generic
+    generic = c.generic;
+    lp = c.lp;
     //surf = c.surf;
 
   });
@@ -262,13 +317,71 @@ describe("Withdraw fee", () => {
     await generic[0].mint(owner.address, 100);
     await generic[0].approve(poseidon.address, 100);
     await poseidon.add(1, generic[0].address, 0, false);
-    await poseidon.deposit(0, 100);
+    await poseidon.deposit(1, 100);
     blockTo(50);
     expect(await tidal.balanceOf(owner.address)).to.equal(0);;
-    await poseidon.withdraw(0, 100);
+    await poseidon.withdraw(1, 100);
     expect(await tidal.balanceOf(owner.address)).to.be.above(0);
+  });
+
+  it("A pool with 10% withdraw fee has a 10% fee levied", async () => {
+    await lp.initialize(generic[0].address, generic[1].address);
+    await generic[0].mint(lp.address, 1000);
+    await generic[1].mint(lp.address, 1000);
+    
+    await lp.mint(owner.address, 100);
+    await lp.approve(poseidon.address, 100);
+    await poseidon.add(1, lp.address, "100000000000000000", false); // fee of 0.1, 1e17
+    await poseidon.deposit(1, 100);
+    blockTo(50);
+    await poseidon.withdraw(1, 100);
+    expect(await lp.balanceOf(owner.address)).to.equal(90);
+  });
+
+  it("A pool containing surf has 10% withdraw fee sent to whirlpool", async () => {
+    await lp.initialize(tidal.address, generic[5].address);
+    await poseidon.transferTokenOwnership(tidal.address, owner.address);
+    await tidal.mint(lp.address, 1000);
+    await tidal.transferOwnership(poseidon.address);
+    await generic[5].mint(lp.address, 1000);
+    await generic[5].mint(poseidon.address, 100); // mint to simulate liquidity removal
+
+    await lp.mint(owner.address, 100);
+    await lp.approve(poseidon.address, 100);
+    await poseidon.add(1, lp.address, "100000000000000000", false);
+    await poseidon.deposit(1, 100);
+    blockTo(50);
+    expect(await generic[5].balanceOf(poseidon.address)).to.equal(100);
+    expect(await generic[5].balanceOf("0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b")).to.equal(0);
+    await mock.router.mock.swapExactTokensForTokens.returns([0,0,0]);
+    await mock.router.mock.removeLiquidity.returns(100, 100);
+    await poseidon.withdraw(1, 100);
+    expect(await generic[5].balanceOf(poseidon.address)).to.equal(0);
+    expect(await generic[5].balanceOf("0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b")).to.equal(100);
+  });
+
+  it("A pool not containing surf has 10% withdraw fee send to feeaddr", async() => {
+    await poseidon.fee(user.alice.address);
+
+    await lp.initialize(generic[0].address, generic[1].address);
+    await generic[0].mint(lp.address, 1000);
+    await generic[1].mint(lp.address, 1000);
+    await generic[0].mint(poseidon.address, 100); // to simulate liquidity removal
+    await generic[1].mint(poseidon.address, 100); // to simulate liquidity removal
+
+    await lp.mint(owner.address, 100);
+    await lp.approve(poseidon.address, 100);
+    await poseidon.add(1, lp.address, "100000000000000000", false);
+    await poseidon.deposit(1, 100);
+    blockTo(50);
+    const feeAddr = await poseidon.feeaddr();
+    expect(await generic[0].balanceOf(feeAddr)).to.equal(0);
+    expect(await generic[1].balanceOf(feeAddr)).to.equal(0);
+    await mock.router.mock.removeLiquidity.returns(100, 100);
+    await poseidon.withdraw(1, 100);
+    expect(feeAddr).to.equal(user.alice.address);
+    expect(await generic[0].balanceOf(feeAddr)).to.equal(100);
+    expect(await generic[1].balanceOf(feeAddr)).to.equal(100);
   })
 
 });
-*/
-
