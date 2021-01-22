@@ -12,7 +12,7 @@ interface IStakingAdapter {
     function deposit(uint amount) external;
     function withdraw(uint amount) external;
     function emergencyWithdraw() external;
-    function rewardTokenAddress() external view returns(address); // does this need to be type IERC20?
+    function rewardTokenAddress() external view returns(address);
     function lpTokenAddress() external view returns(address);
     function pending() external view returns (uint256);
     function balance() external view returns (uint256);

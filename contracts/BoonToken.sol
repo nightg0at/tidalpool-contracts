@@ -1,6 +1,6 @@
 /*
   Airdrop token.
-  Stake boon for tidal and riptide tokens on tide.finance during the first phase.
+  Stake boon for tidal tokens on tide.finance during the first phase.
 
   @nightg0at
   SPDX-License-Identifier: MIT

@@ -46,7 +46,11 @@ async function main(provider) {
     router: await deployMockContract(
       owner,
       require("../artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json").abi
-    )
+    ),
+    adapter: await deployMockContract(
+      owner,
+      require("../artifacts/contracts/restaking/PickleAdapter.sol/PickleAdapter.json").abi
+    ),
   }
 /*
   const Surf = await ethers.getContractFactory("contracts/dummies/erc20.sol:Surf");
@@ -253,6 +257,119 @@ describe("Ownership and migration", () => {
 
 })
 
+describe("Config changes (onlyOwner)", () => {
+  beforeEach(async () => {
+    c = await loadFixture(main);
+    parent = c.parent;
+    tidal = c.tidal;
+    riptide = c.riptide;
+    poseidon = c.poseidon;
+    owner = c.owner;
+    user = c.user;
+    mock = c.mock;
+    generic = c.generic
+
+  });
+
+  it("Add pool", async () => {
+    await expect(poseidon.connect(user.alice).add(0, generic[0].address, 0, false)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.add(0, generic[0].address, 0, false);
+    const pool = await poseidon.poolInfo(1);
+    expect(pool.lpToken).to.equal(generic[0].address);
+  });
+
+  it("Add restaking pool", async () => {
+    // to pass validAdapter() modifier
+    await mock.adapter.mock.rewardTokenAddress.returns(generic[0].address);
+    await mock.adapter.mock.lpTokenAddress.returns(generic[1].address);
+
+    await expect(poseidon.connect(user.alice).addWithRestaking(0, 0, false, mock.adapter.address)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.addWithRestaking(0, 0, false, mock.adapter.address);
+    const pool = await poseidon.poolInfo(1);
+    expect(pool.lpToken).to.equal(generic[1].address);
+    expect(pool.adapter).to.equal(mock.adapter.address);
+  });
+
+  it("Set alloc point", async () => {
+    await poseidon.add(1, generic[0].address, 0, false);
+    const poolBefore = await poseidon.poolInfo(1);
+    expect(poolBefore.allocPoint).to.equal(1);
+    await expect(poseidon.connect(user.alice).set(1, 2, false)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.set(1, 2, false);
+    const poolAfter = await poseidon.poolInfo(1);
+    expect(poolAfter.allocPoint).to.equal(2);
+  });
+
+  it("Set non-restaking pool to restaking", async () => {
+    await mock.adapter.mock.rewardTokenAddress.returns(generic[0].address);
+    await mock.adapter.mock.lpTokenAddress.returns(generic[0].address);    
+    await poseidon.add(1, generic[0].address, 0, false);
+    const poolBefore = await poseidon.poolInfo(1);
+    expect(await poseidon.isRestaking(1)).to.equal(false);
+    expect(poolBefore.adapter).to.equal("0x0000000000000000000000000000000000000000");
+    await expect(poseidon.connect(user.alice).setRestaking(1, mock.adapter.address, false)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.setRestaking(1, mock.adapter.address, false);
+    const poolAfter = await poseidon.poolInfo(1);
+    expect(await poseidon.isRestaking(1)).to.equal(true);
+    expect(poolAfter.adapter).to.equal(mock.adapter.address);
+  });
+
+  it("Remove restaking", async () => {
+    await mock.adapter.mock.rewardTokenAddress.returns(generic[0].address);
+    await mock.adapter.mock.lpTokenAddress.returns(generic[1].address);
+    await mock.adapter.mock.emergencyWithdraw.returns();
+    await poseidon.addWithRestaking(0, 0, false, mock.adapter.address);
+    await expect(poseidon.connect(user.alice).removeRestaking(1, false)).to.be.revertedWith("Ownable: caller is not the owner");
+    const poolBefore = await poseidon.poolInfo(1);
+    expect(await poseidon.isRestaking(1)).to.equal(true);
+    expect(poolBefore.adapter).to.equal(mock.adapter.address);
+    await poseidon.removeRestaking(1, false);
+    const poolAfter = await poseidon.poolInfo(1);
+    expect(await poseidon.isRestaking(1)).to.equal(false);
+    expect(poolAfter.adapter).to.equal("0x0000000000000000000000000000000000000000");
+  })
+
+  it("Weather config", async () => {
+    await expect(poseidon.connect(user.alice).setWeatherConfig(user.alice.address, 2)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.setWeatherConfig(user.alice.address, 2);
+  });
+
+  it("Rewards per block", async () => {
+    const rewardBefore = await poseidon.baseRewardPerBlock();
+    await expect(poseidon.connect(user.alice).setRewardPerBlock(10)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.setRewardPerBlock(10);
+    expect (await poseidon.baseRewardPerBlock()).to.equal(10);
+    expect (await poseidon.baseRewardPerBlock()).to.not.equal(rewardBefore);
+  });
+
+  it("Surf token and whirlpool addresses", async () => {
+    const surfBefore = await poseidon.surf();
+    const whirlpoolBefore = await poseidon.whirlpool();
+    await expect(poseidon.connect(user.alice).setSurfConfig(generic[0].address, generic[1].address)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.setSurfConfig(generic[2].address, generic[3].address);
+    expect(surfBefore).to.equal(generic[5].address);
+    expect(whirlpoolBefore).to.equal("0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b");
+    expect(await poseidon.surf()).to.equal(generic[2].address);
+    expect(await poseidon.whirlpool()).to.equal(generic[3].address);
+  });
+
+  it("Dev address", async () => {
+    const devBefore = await poseidon.devaddr();
+    await expect(poseidon.connect(user.alice).dev(generic[0].address)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.dev(generic[1].address);
+    expect(await poseidon.devaddr()).to.equal(generic[1].address);
+    expect(await poseidon.devaddr()).to.not.equal(devBefore);
+  });
+
+  it("Withdraw fee address", async () => {
+    const feeBefore = await poseidon.feeaddr();
+    await expect(poseidon.connect(user.alice).fee(generic[0].address)).to.be.revertedWith("Ownable: caller is not the owner");
+    await poseidon.fee(generic[1].address);
+    expect(await poseidon.feeaddr()).to.equal(generic[1].address);
+    expect(await poseidon.feeaddr()).to.not.equal(feeBefore);
+  });
+
+});
 
 describe("Weather", () => {
   beforeEach(async () => {
@@ -273,10 +390,7 @@ describe("Weather", () => {
     expect(await poseidon.stormy()).to.equal(false);
   });
 
-  it("Weather config can only be set by owner", async () => {
-    await expect(poseidon.connect(user.alice).setWeatherConfig(user.alice.address, 2)).to.be.revertedWith("Ownable: caller is not the owner");
-    await poseidon.setWeatherConfig(user.alice.address, 2);
-  });
+  
 
   it("Weather can only be changed by Zeus", async () => {
     await poseidon.setWeatherConfig(user.alice.address, 2);
@@ -360,7 +474,7 @@ describe("Withdraw", () => {
     expect(await generic[5].balanceOf("0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b")).to.equal(100);
   });
 
-  it("A pool not containing surf has 10% withdraw fee send to feeaddr", async() => {
+  it("A pool not containing surf has 10% withdraw fee sent to feeaddr", async() => {
     await poseidon.fee(user.alice.address);
 
     await lp.initialize(generic[0].address, generic[1].address);
@@ -383,5 +497,71 @@ describe("Withdraw", () => {
     expect(await generic[0].balanceOf(feeAddr)).to.equal(100);
     expect(await generic[1].balanceOf(feeAddr)).to.equal(100);
   })
+
+});
+
+
+describe("Airdrop farming simulation", () => {
+  beforeEach(async () => {
+    c = await loadFixture(main);
+    parent = c.parent;
+    tidal = c.tidal;
+    riptide = c.riptide;
+    boon = c.boon;
+    poseidon = c.poseidon;
+    owner = c.owner;
+    user = c.user;
+    mock = c.mock;
+    generic = c.generic;
+    lp = c.lp;
+  });
+
+  it("Farming Boon should yield 4.2 tidal during the first phase", async () => {
+    await poseidon.transferTokenOwnership(tidal.address, owner.address);
+    await tidal.mint(generic[0].address, "8400000000000000000") //4.2 sale + 4.2 TIDAL-SURF-LP
+    await tidal.transferOwnership(poseidon.address);
+
+    expect(await poseidon.phase()).to.equal(tidal.address);
+    await poseidon.setRewardPerBlock(0);
+
+    /*
+      totalSupply - sale and lp
+      69 - 8.4 = 60.6
+      target emission is 4.2
+      4.2 / 60.6 = 0.0693069306930693 // ~ 6.9% of emissions
+
+      let totalAllocPoint = 1000;
+      boon allocPoint = (4.2/60.6)*1000 = 69
+      other allocPoint = 1000 - 69 = 931
+    */
+  
+    await poseidon.add(931, generic[0].address, 0, false);
+    await poseidon.set(0, 69, false);
+
+    await boon.mint(owner.address, 100);
+    await boon.approve(poseidon.address, 100);
+    await poseidon.deposit(0, 100);
+
+    await generic[0].mint(owner.address, 100);
+    await generic[0].approve(poseidon.address, 100);
+    await poseidon.deposit(1, 100);
+  
+    // high rewards to speed things up
+    await poseidon.setRewardPerBlock("100000000000000000"); // 0.1
+    const capHit = 60.6/0.1;
+    const block = await ethers.provider.getBlockNumber();
+    const target = capHit + block;
+    await blockTo(target); // fast forward to the endtime
+    await poseidon.massUpdatePools();
+    const poolBefore = await poseidon.poolInfo(0);
+    expect(poolBefore.allocPoint).to.equal(69);
+    await poseidon.massUpdatePools(); // twice because the updatePhase() before minting
+    //console.log("Tidal supply: %s", ethers.utils.formatEther(await tidal.totalSupply()));
+    expect(await poseidon.phase()).to.equal(riptide.address);
+    const poolAfter = await poseidon.poolInfo(0);
+    expect(poolAfter.allocPoint).to.equal(0);
+    const pending = await poseidon.pendingTokens(0, owner.address);
+    //console.log("Pending rewards from pool 0: %s", ethers.utils.formatEther(pending[0]));
+  });
 
 });

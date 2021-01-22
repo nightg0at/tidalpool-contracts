@@ -85,7 +85,7 @@ contract Poseidon is Ownable, DSMath {
     // Block number when bonus SUSHI period ends.
     //uint256 public bonusEndBlock;
     // SUSHI tokens created per block.
-    uint256 public baseRewardPerBlock = 42e12; // base reward token emission (0.000042)
+    uint256 public baseRewardPerBlock = 2496e11; // base reward token emission (0.0002496)
     // Bonus muliplier for early sushi makers.
     //uint256 public constant BONUS_MULTIPLIER = 10;
     uint256 public devDivisor = 238; // dev fund of 0.42%, 100/238 = 0.420168...
@@ -516,18 +516,13 @@ contract Poseidon is Ownable, DSMath {
     function processWithdrawFee(address _lpToken, uint256 _fee) private {
         // get token addresses & balances
         address token0 = IUniswapV2Pair(_lpToken).token0();
-        //uint256 token0BalanceBefore = IERC20(token0).balanceOf(address(this));
 
         address token1 = IUniswapV2Pair(_lpToken).token1();
-        //uint256 token1BalanceBefore = IERC20(token1).balanceOf(address(this));
 
         // remove liquidity
         IERC20(_lpToken).approve(address(router), _fee);
         (uint256 token0Amount, uint256 token1Amount) = router.removeLiquidity(token0, token1, _fee, 0, 0, address(this), block.timestamp);
         IERC20(_lpToken).approve(address(router), 0);
-
-        //uint256 token0BalanceAfter = IERC20(token0).balanceOf(address(this));
-        //uint256 token1BalanceAfter = IERC20(token1).balanceOf(address(this));
 
         address[] memory surfPath = new address[](2);
         surfPath[1] = surf;
@@ -614,8 +609,7 @@ contract Poseidon is Ownable, DSMath {
     }
 
     // Update dev address by the previous dev.
-    function dev(address _devaddr) public {
-        require(msg.sender == devaddr, "dev: wut?");
+    function dev(address _devaddr) public onlyOwner {
         devaddr = _devaddr;
     }
 
@@ -662,10 +656,11 @@ contract Poseidon is Ownable, DSMath {
     function updatePhase() internal {
         //console.log("POSEIDON::updatePhase(): tidal.totalSupply(): %s, TIDAL_CAP: %s, TIDAL_VERTEX: %s", tidal.totalSupply(), TIDAL_CAP, TIDAL_VERTEX);
         if (phase == address(tidal) && tidal.totalSupply() >= TIDAL_CAP){
+            //console.log("POSEIDON::updatePhase(): cap hit");
             // disable boon airdrop farming after cap is hit
             if (poolInfo[0].allocPoint > 0) {
-                PoolInfo storage pool = poolInfo[0];
-                pool.allocPoint = 0;
+                //console.log("POSEIDON::updatePhase(): disabling boon rewards");
+                poolInfo[0].allocPoint = 0;
             }
             //console.log("POSEIDON::updatePhase(): tidal => riptide");
             phase = address(riptide);
@@ -676,9 +671,4 @@ contract Poseidon is Ownable, DSMath {
         }
     }
 
-    /* unused
-    function togglePhase() internal {
-        phase = phase == address(tidal) ? address(riptide) : address(tidal);
-    }
-    */
 }
