@@ -24,7 +24,11 @@ artifacts
 
 # flattened contracts for remix
 flat_*.sol
+flat*
 
+# anything truffle
+migrations
+truffle-config.js
 
 # private notes
 resources
