@@ -4,7 +4,7 @@ const { loadFixture } = waffle;
 const provider = waffle.provider;
 const { isCallTrace } = require("hardhat/internal/hardhat-network/stack-traces/message-trace");
 const { Contract } = require("ethers");
-const { deployContract, link } = require("ethereum-waffle");
+const { deployContract, link, deployMockContract } = require("ethereum-waffle");
 
 const zeroAddr = "0x0000000000000000000000000000000000000000";
 
@@ -41,44 +41,6 @@ function nice(thing) {
 
 
 async function fixture(provider) {
-  
-  const mock = {
-    poseidon: await deployMockContract(
-      owner,
-      require("../artifacts/contracts/Poseidon.sol/Poseidon.json").abi
-    ),
-    registry: await deployMockContract(
-      owner,
-      require("../artifacts/@openzeppelin/contracts/introspection/IERC1820Registry.sol/IERC1820Registry.json").abi
-    ),
-    router: await deployMockContract(
-      owner,
-      require("../artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json").abi
-    )
-  }
-
-  const Parent = await ethers.getContractFactory("contracts/TideParent.sol:TideParent");
-  const parent = await Parent.deploy(mock.registry.address);
-  const Token = await ethers.getContractFactory("contracts/TideToken.sol:TideToken");
-
-  const token = {
-    tidal: await Token.deploy("Tidal Token", "TIDAL", parent.address),
-    riptide: await Token.deploy("Riptide Token", "RIPTIDE", parent.address),
-    parent: parent,
-    pickle: await (await ethers.getContractFactory("Pickle")).deploy(),
-    drc: await (await ethers.getContractFactory("Dracula")).deploy(),
-    farm: await (await ethers.getContractFactory("Farm")).deploy(),
-    nice: await (await ethers.getContractFactory("NiceToken")).deploy(),
-    rotten: null, // implemented elsewhere
-    maggot: null, // implemented elsewhere
-  }
-  const lp = {
-    pickle: await (await ethers.getContractFactory("PickleLP")).deploy(),
-    drc: await (await ethers.getContractFactory("DraculaLP")).deploy(),
-    farm: await (await ethers.getContractFactory("FarmLP")).deploy(),
-    nice: await (await ethers.getContractFactory("NiceLP")).deploy(),
-    rotten: await (await ethers.getContractFactory("RottenLP")).deploy()
-  }
 
   const wallets = await ethers.getSigners();
   const owner = {
@@ -96,17 +58,73 @@ async function fixture(provider) {
     carol: wallets[8]
   }
 
+  const mock = {
+    poseidon: await deployMockContract(
+      owner.tide,
+      require("../artifacts/contracts/Poseidon.sol/Poseidon.json").abi
+    ),
+    registry: await deployMockContract(
+      owner.tide,
+      require("../artifacts/@openzeppelin/contracts/introspection/IERC1820Registry.sol/IERC1820Registry.json").abi
+    ),
+    router: await deployMockContract(
+      owner.tide,
+      require("../artifacts/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json").abi
+    )
+  }
+
+  const Parent = await ethers.getContractFactory("contracts/TideParent.sol:TideParent");
+  const parent = await Parent.deploy(mock.registry.address);
+
+  const generic = [
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("zero"),
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("one"),
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("two"),
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("three"),
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("four"),
+    await (await ethers.getContractFactory("contracts/dummies/erc20.sol:Generic")).deploy("five"),
+  ]
+
+  const Token = await ethers.getContractFactory("contracts/TideToken.sol:TideToken");
+
+  const token = {
+    tidal: await Token.deploy("Tidal Token", "TIDAL", parent.address),
+    riptide: await Token.deploy("Riptide Token", "RIPTIDE", parent.address),
+    boon: await (await ethers.getContractFactory("contracts/BoonToken.sol:BoonToken")).deploy(),
+    parent: parent,
+    pickle: await (await ethers.getContractFactory("Pickle")).deploy(),
+    drc: await (await ethers.getContractFactory("Dracula")).deploy(),
+    farm: await (await ethers.getContractFactory("Farm")).deploy(),
+    nice: await (await ethers.getContractFactory("NiceToken")).deploy(),
+    rotten: null, // implemented elsewhere
+    maggot: null, // implemented elsewhere
+  }
+
+  const lp = {
+    poseidon: await (await ethers.getContractFactory("contracts/dummies/UniswapV2Pair.sol:UniswapV2Pair")).deploy(),
+    pickle: await (await ethers.getContractFactory("PickleLP")).deploy(),
+    drc: await (await ethers.getContractFactory("DraculaLP")).deploy(),
+    farm: await (await ethers.getContractFactory("FarmLP")).deploy(),
+    nice: await (await ethers.getContractFactory("NiceLP")).deploy(),
+    rotten: await (await ethers.getContractFactory("RottenLP")).deploy()
+  }
+
   const Poseidon = await ethers.getContractFactory("contracts/Poseidon.sol:Poseidon");
   const poseidon = await (Poseidon).deploy(
-    token.crops.address,
-    owner.crops.address,
-    ethers.utils.parseEther("5"),
-    1,
-    2
+    mock.router.address,
+    token.tidal.address,
+    token.riptide.address,
+    token.boon.address,
+    generic[5].address, // mock surf
+    "0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b",
+    owner.tide.address,
+    1
   );
 
-  // make cropsFarm the owner of cropsToken
-  await token.crops.transferOwnership(cropsFarm.address);
+  await token.tidal.transferOwnership(poseidon.address);
+  await token.riptide.transferOwnership(poseidon.address);
+
+  await token.parent.setAddresses(token.tidal.address, token.riptide.address, poseidon.address);
 
   const PickleFarm = await ethers.getContractFactory("contracts/dummies/pickleFarm.sol:MasterChef");
   const pickleFarm = await (PickleFarm).connect(owner.pickle).deploy(
@@ -179,7 +197,7 @@ async function fixture(provider) {
   await zombieChef.connect(owner.rotten).add(1, lp.rotten.address, 1);
 
   const farm = {
-    crops: cropsFarm,
+    poseidon: poseidon,
     pickle: pickleFarm,
     drc: draculaFarm,
     harvest: harvestFarm,
@@ -193,7 +211,7 @@ async function fixture(provider) {
     farm.pickle.address,
     lp.pickle.address,
     token.pickle.address,
-    farm.crops.address,
+    farm.poseidon.address,
     0
   );
 
@@ -202,7 +220,7 @@ async function fixture(provider) {
     farm.drc.address,
     lp.drc.address,
     token.drc.address,
-    farm.crops.address,
+    farm.poseidon.address,
     0
   );
 
@@ -211,7 +229,7 @@ async function fixture(provider) {
     farm.harvest.address,
     lp.farm.address,
     token.farm.address,
-    farm.crops.address
+    farm.poseidon.address
   );
 
 
@@ -220,7 +238,7 @@ async function fixture(provider) {
     farm.nice.address,
     lp.nice.address,
     token.nice.address,
-    farm.crops.address,
+    farm.poseidon.address,
     0
   );
 
@@ -229,7 +247,7 @@ async function fixture(provider) {
     farm.rotten.address,
     lp.rotten.address,
     token.rotten.address,
-    farm.crops.address,
+    farm.poseidon.address,
     0
   )
 
@@ -259,12 +277,20 @@ describe("Preliminary MasterChef checks", () => {
     adapter = c.adapter;
   });   
 
-  it("Crops token initial supply is 0", async () => {
-    expect(await token.crops.totalSupply()).to.equal(0);
+  it("Tidal token initial supply is 0", async () => {
+    expect(await token.tidal.totalSupply()).to.equal(0);
   });
 
-  it("MasterChef is cropsToken owner", async () => {
-    expect(await token.crops.owner()).to.equal(farm.crops.address);
+  it("MasterChef is Tidal owner", async () => {
+    expect(await token.tidal.owner()).to.equal(farm.poseidon.address);
+  });
+
+  it("Riptide token initial supply is 0", async () => {
+    expect(await token.riptide.totalSupply()).to.equal(0);
+  });
+
+  it("MasterChef is Riptide owner", async () => {
+    expect(await token.riptide.owner()).to.equal(farm.poseidon.address);
   });
 });
 
@@ -332,31 +358,31 @@ function adapterTest(a) {
     it("Adapter attribute check", async () => {
       expect(await adapter[a.farm].lpTokenAddress()).to.equal(lp[a.token].address);
       expect(await adapter[a.farm].rewardTokenAddress()).to.equal(token[a.token].address);
-      expect(await adapter[a.farm].home()).to.equal(farm.crops.address);
+      expect(await adapter[a.farm].home()).to.equal(farm.poseidon.address);
       expect(await adapter[a.farm].target()).to.equal(farm[a.farm].address);
     });
   
     it("New restaking pool: Adapter added to MasterChef", async () => {
-      expect(await farm.crops.poolLength()).to.equal(0);
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
-      expect(await farm.crops.poolLength()).to.equal(1);
+      expect(await farm.poseidon.poolLength()).to.equal(1);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
+      expect(await farm.poseidon.poolLength()).to.equal(2);
   
-      const pool = await farm.crops.poolInfo(0);
+      const pool = await farm.poseidon.poolInfo(1);
       expect(pool.lpToken).to.equal(lp[a.token].address);
       expect(pool.adapter).to.equal(adapter[a.farm].address);
       expect(pool.otherToken).to.equal(token[a.token].address);
     });
   
     it("New normal pool: Changed to restaking pool", async () => {
-      await farm.crops.add(1, lp[a.token].address, 1);
-      const poolBefore = await farm.crops.poolInfo(0);
+      await farm.poseidon.add(1, lp[a.token].address, 0, true);
+      const poolBefore = await farm.poseidon.poolInfo(1);
       expect(poolBefore.lpToken).to.equal(lp[a.token].address);
       expect(poolBefore.adapter).to.equal(zeroAddr);
       expect(poolBefore.otherToken).to.equal(zeroAddr);
   
-      await farm.crops.setRestaking(0, adapter[a.farm].address, 1);
+      await farm.poseidon.setRestaking(1, adapter[a.farm].address, true);
   
-      const poolAfter = await farm.crops.poolInfo(0);
+      const poolAfter = await farm.poseidon.poolInfo(1);
       expect(poolAfter.lpToken).to.equal(lp[a.token].address);
       expect(poolAfter.adapter).to.equal(adapter[a.farm].address);
       expect(poolAfter.otherToken).to.equal(token[a.token].address);
@@ -364,159 +390,159 @@ function adapterTest(a) {
     });
 
     it("Restaking pool: Changed to normal with correct rewards", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
 
       await lp[a.token].transfer(user.alice.address, 1000);
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
 
-      expect(await token.crops.balanceOf(user.alice.address)).to.equal(0);
+      expect(await token.tidal.balanceOf(user.alice.address)).to.equal(0);
       expect(await token[a.token].balanceOf(user.alice.address)).to.equal(0);
       
       await blockTravel(5);
-      await farm.crops.removeRestaking(0, 1);
-      await farm.crops.connect(user.alice).withdraw(0, 0);
+      await farm.poseidon.removeRestaking(1, true);
+      await farm.poseidon.connect(user.alice).withdraw(1, 0);
 
-      const cropsBal = await token.crops.balanceOf(user.alice.address);
+      const tidalBal = await token.tidal.balanceOf(user.alice.address);
       const otherBal = await token[a.token].balanceOf(user.alice.address);
       await blockTravel(5);
-      await farm.crops.connect(user.alice).withdraw(0, 1000);
-      const cropsNewBal = await token.crops.balanceOf(user.alice.address);
+      await farm.poseidon.connect(user.alice).withdraw(1, 1000);
+      const tidalNewBal = await token.tidal.balanceOf(user.alice.address);
       const otherNewBal = await token[a.token].balanceOf(user.alice.address);
 
-      expect(cropsBal).to.lt(cropsNewBal);
+      expect(tidalBal).to.lt(tidalNewBal);
       expect(otherBal).to.equal(otherNewBal);
       expect(otherBal).to.gt(0);
 
     });
 
     it("Restaking pool: Changed to new restaking pool with correct rewards", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
 
       await lp[a.token].transfer(user.alice.address, 1000);
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
 
-      expect(await token.crops.balanceOf(user.alice.address)).to.equal(0);
+      expect(await token.tidal.balanceOf(user.alice.address)).to.equal(0);
       expect(await token[a.token].balanceOf(user.alice.address)).to.equal(0);
       
       await blockTravel(5);
-      await farm.crops.setRestaking(0, adapter[a.farm].address, 1);
-      await farm.crops.connect(user.alice).withdraw(0, 0);
+      await farm.poseidon.setRestaking(1, adapter[a.farm].address, true);
+      await farm.poseidon.connect(user.alice).withdraw(1, 0);
 
-      const cropsBal = await token.crops.balanceOf(user.alice.address);
+      const tidalBal = await token.tidal.balanceOf(user.alice.address);
       const otherBal = await token[a.token].balanceOf(user.alice.address);
       await blockTravel(5);
-      await farm.crops.connect(user.alice).withdraw(0, 0);
-      const cropsNewBal = await token.crops.balanceOf(user.alice.address);
+      await farm.poseidon.connect(user.alice).withdraw(1, 0);
+      const tidalNewBal = await token.tidal.balanceOf(user.alice.address);
       const otherNewBal = await token[a.token].balanceOf(user.alice.address);
       
-      expect(cropsBal).to.lt(cropsNewBal);
+      expect(tidalBal).to.lt(tidalNewBal);
       expect(otherBal).to.lt(otherNewBal);
 
     });
   
     it("Restake deposit & withdraw: Correct LP token locations", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
       await lp[a.token].transfer(user.alice.address, 1000);
   
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
       expect(await lp[a.token].balanceOf(adapter[a.farm].address)).to.equal(0);
       expect(await lp[a.token].balanceOf(farm[a.farm].address)).to.equal(0);
-      expect(await lp[a.token].balanceOf(farm.crops.address)).to.equal(0);
+      expect(await lp[a.token].balanceOf(farm.poseidon.address)).to.equal(0);
   
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
   
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
       expect(await lp[a.token].balanceOf(adapter[a.farm].address)).to.equal(0);
       expect(await lp[a.token].balanceOf(farm[a.farm].address)).to.equal(1000);
-      expect(await lp[a.token].balanceOf(farm.crops.address)).to.equal(0);
+      expect(await lp[a.token].balanceOf(farm.poseidon.address)).to.equal(0);
   
-      await farm.crops.connect(user.alice).withdraw(0, 1000);
+      await farm.poseidon.connect(user.alice).withdraw(1, 1000);
   
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
       expect(await lp[a.token].balanceOf(adapter[a.farm].address)).to.equal(0);
       expect(await lp[a.token].balanceOf(farm[a.farm].address)).to.equal(0);
-      expect(await lp[a.token].balanceOf(farm.crops.address)).to.equal(0);
+      expect(await lp[a.token].balanceOf(farm.poseidon.address)).to.equal(0);
     });
   
     it("Restake deposit: Withdraw all", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
   
       await lp[a.token].transfer(user.alice.address, 1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
   
-      const userInfoBeforeDeposit = await farm.crops.userInfo(0, user.alice.address);
+      const userInfoBeforeDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoBeforeDeposit.amount).to.equal(0);
   
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
-      const userInfoAtDeposit = await farm.crops.userInfo(0, user.alice.address);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
+      const userInfoAtDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAtDeposit.amount).to.equal(1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
   
-      await farm.crops.connect(user.alice).withdraw(0, 1000);
-      const userInfoAfterWithdraw = await farm.crops.userInfo(0, user.alice.address);
+      await farm.poseidon.connect(user.alice).withdraw(1, 1000);
+      const userInfoAfterWithdraw = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAfterWithdraw.amount).to.equal(0);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
     });
   
     it("Restake deposit: Withdraw some", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
   
       await lp[a.token].transfer(user.alice.address, 1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
   
-      const userInfoBeforeDeposit = await farm.crops.userInfo(0, user.alice.address);
+      const userInfoBeforeDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoBeforeDeposit.amount).to.equal(0);
   
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
-      const userInfoAtDeposit = await farm.crops.userInfo(0, user.alice.address);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
+      const userInfoAtDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAtDeposit.amount).to.equal(1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
   
-      await farm.crops.connect(user.alice).withdraw(0, 500);
-      const userInfoAfterWithdraw = await farm.crops.userInfo(0, user.alice.address);
+      await farm.poseidon.connect(user.alice).withdraw(1, 500);
+      const userInfoAfterWithdraw = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAfterWithdraw.amount).to.equal(500);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(500);
     });
 
     it("Restake deposit: Cannot withdraw more than deposit", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
   
       await lp[a.token].transfer(user.alice.address, 1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
   
-      const userInfoBeforeDeposit = await farm.crops.userInfo(0, user.alice.address);
+      const userInfoBeforeDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoBeforeDeposit.amount).to.equal(0);
   
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000);
-      await farm.crops.connect(user.alice).deposit(0, 1000);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000);
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
       
-      const userInfoAtDeposit = await farm.crops.userInfo(0, user.alice.address);
+      const userInfoAtDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAtDeposit.amount).to.equal(1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
   
-      await expect(farm.crops.connect(user.alice).withdraw(0, 1001)).to.be.revertedWith("withdraw: not good");
-      const userInfoAfterWithdraw = await farm.crops.userInfo(0, user.alice.address);
+      await expect(farm.poseidon.connect(user.alice).withdraw(1, 1001)).to.be.revertedWith("withdraw: not good");
+      const userInfoAfterWithdraw = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAfterWithdraw.amount).to.equal(1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
   
     });
 
     it(`Pending ${a.token} reward passthrough from target`, async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
   
       await lp[a.token].transfer(user.alice.address, 1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
   
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000)
-      await farm.crops.connect(user.alice).deposit(0, 1000);
-      const userInfoAtDeposit = await farm.crops.userInfo(0, user.alice.address);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000)
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
+      const userInfoAtDeposit = await farm.poseidon.userInfo(1, user.alice.address);
       expect(userInfoAtDeposit.amount).to.equal(1000);
-      expect(await farm.crops.pendingOther(0, user.alice.address)).to.equal(0);
+      expect(await farm.poseidon.pendingOther(1, user.alice.address)).to.equal(0);
 
       const depositBlock = await ethers.provider.getBlockNumber();
       const blockSpan = 10;
@@ -526,104 +552,104 @@ function adapterTest(a) {
 
       const targetRewards = await adapter[a.farm].pending();
       // should hold because we're the only staker
-      //console.log(await farm.crops.pendingOther(0, user.alice.address));
+      //console.log(await farm.poseidon.pendingOther(0, user.alice.address));
       expect(targetRewards).to.gt(ethers.BigNumber.from("0"));
-      expect(await farm.crops.pendingOther(0, user.alice.address)).to.equal(targetRewards);
+      expect(await farm.poseidon.pendingOther(1, user.alice.address)).to.equal(targetRewards);
     });
 
-    it(`Stakers receive crops and ${a.token} in equal proportions`, async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+    it(`Stakers receive tidal and ${a.token} in equal proportions`, async () => {
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
 
       // alice: 50%, bob: 30% carol: 20%
       await lp[a.token].transfer(user.alice.address, 500);
       await lp[a.token].transfer(user.bob.address, 300);
       await lp[a.token].transfer(user.carol.address, 200);
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 500);
-      await lp[a.token].connect(user.bob).approve(farm.crops.address, 300);
-      await lp[a.token].connect(user.carol).approve(farm.crops.address, 200);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 500);
+      await lp[a.token].connect(user.bob).approve(farm.poseidon.address, 300);
+      await lp[a.token].connect(user.carol).approve(farm.poseidon.address, 200);
   
       await blockTo(startBlock + 50);
-      await farm.crops.connect(user.alice).deposit(0, 500);
+      await farm.poseidon.connect(user.alice).deposit(1, 500);
       await blockTo(startBlock + 100);
-      await farm.crops.connect(user.bob).deposit(0, 300);
+      await farm.poseidon.connect(user.bob).deposit(1, 300);
       await blockTo(startBlock + 150);
-      await farm.crops.connect(user.carol).deposit(0, 200);
+      await farm.poseidon.connect(user.carol).deposit(1, 200);
 
 
       // alice claims and withdraws
       await blockTo(startBlock + 1199);
-      //await farm.crops.updatePool(0);
-      await farm.crops.connect(user.alice).withdraw(0, 500);
-      let poolInfo = await farm.crops.poolInfo(0);
+      //await farm.poseidon.updatePool(0);
+      await farm.poseidon.connect(user.alice).withdraw(1, 500);
+      let poolInfo = await farm.poseidon.poolInfo(1);
       //console.log(poolInfo);
-      let cropsBal = await token.crops.balanceOf(user.alice.address);
+      let tidalBal = await token.tidal.balanceOf(user.alice.address);
       let otherBal = await token[a.token].balanceOf(user.alice.address);
-      let cropsFraction = poolInfo.accCropsPerShare.div(cropsBal);
+      let tidalFraction = poolInfo.accTidalPerShare.div(tidalBal);
       let otherFraction = poolInfo.accOtherPerShare.div(otherBal);
       
       /*
-      console.log("crops bal:", cropsBal, ethers.utils.formatEther(cropsBal));
-      console.log("accCropsPerShare:", poolInfo.accCropsPerShare, ethers.utils.formatEther(poolInfo.accCropsPerShare));
-      console.log("crops fraction:", cropsFraction, ethers.utils.formatEther(cropsFraction));
+      console.log("tidal bal:", tidalBal, ethers.utils.formatEther(tidalBal));
+      console.log("accTidalPerShare:", poolInfo.accTidalPerShare, ethers.utils.formatEther(poolInfo.accTidalPerShare));
+      console.log("tidal fraction:", tidalFraction, ethers.utils.formatEther(tidalFraction));
       console.log("other bal:", otherBal, ethers.utils.formatEther(otherBal));
       console.log("accOtherPerShare:", poolInfo.accOtherPerShare, ethers.utils.formatEther(poolInfo.accOtherPerShare));
       console.log("other fraction", otherFraction, ethers.utils.formatEther(otherFraction));
       */
 
       a.style == "StakingRewards" || a.farm == "nice" || a.farm == "rotten"
-        ? expect(parseInt(cropsFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
-        : expect(cropsFraction).to.equal(otherFraction);
+        ? expect(parseInt(tidalFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
+        : expect(tidalFraction).to.equal(otherFraction);
       
 
       // bob claims
       await blockTo(startBlock + 1399);
-      await farm.crops.updatePool(0);
-      poolInfo = await farm.crops.poolInfo(0);
-      await farm.crops.connect(user.bob).withdraw(0, 0);
-      cropsBal = await token.crops.balanceOf(user.bob.address);
+      await farm.poseidon.updatePool(1);
+      poolInfo = await farm.poseidon.poolInfo(1);
+      await farm.poseidon.connect(user.bob).withdraw(1, 0);
+      tidalBal = await token.tidal.balanceOf(user.bob.address);
       otherBal = await token[a.token].balanceOf(user.bob.address);
-      cropsFraction = poolInfo.accCropsPerShare.div(cropsBal);
+      tidalFraction = poolInfo.accTidalPerShare.div(tidalBal);
       otherFraction = poolInfo.accOtherPerShare.div(otherBal);
 
       a.style == "StakingRewards" || a.farm == "nice" || a.farm == "rotten"
-        ? expect(parseInt(cropsFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
-        : expect(cropsFraction).to.equal(otherFraction);
+        ? expect(parseInt(tidalFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
+        : expect(tidalFraction).to.equal(otherFraction);
 
 
       // carol claims and withdraws
       await blockTo(startBlock + 1699);
-      await farm.crops.updatePool(0);
-      poolInfo = await farm.crops.poolInfo(0);
-      await farm.crops.connect(user.carol).withdraw(0, 200);
-      cropsBal = await token.crops.balanceOf(user.carol.address);
+      await farm.poseidon.updatePool(1);
+      poolInfo = await farm.poseidon.poolInfo(1);
+      await farm.poseidon.connect(user.carol).withdraw(1, 200);
+      tidalBal = await token.tidal.balanceOf(user.carol.address);
       otherBal = await token[a.token].balanceOf(user.carol.address);
-      cropsFraction = poolInfo.accCropsPerShare.div(cropsBal);
+      tidalFraction = poolInfo.accTidalPerShare.div(tidalBal);
       otherFraction = poolInfo.accOtherPerShare.div(otherBal);
 
       a.style == "StakingRewards" || a.farm == "nice" || a.farm == "rotten"
-        ? expect(parseInt(cropsFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
-        : expect(cropsFraction).to.equal(otherFraction);
+        ? expect(parseInt(tidalFraction)).to.be.closeTo(parseInt(otherFraction), a.removePrecision)
+        : expect(tidalFraction).to.equal(otherFraction);
 
     });
 
     it("Restake deposit & emergency withdraw", async () => {
-      await farm.crops.addWithRestaking(1, 1, adapter[a.farm].address);
+      await farm.poseidon.addWithRestaking(1, 0, true, adapter[a.farm].address);
 
       await lp[a.token].transfer(user.alice.address, 1000);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
 
-      await lp[a.token].connect(user.alice).approve(farm.crops.address, 1000)
-      await farm.crops.connect(user.alice).deposit(0, 1000);
+      await lp[a.token].connect(user.alice).approve(farm.poseidon.address, 1000)
+      await farm.poseidon.connect(user.alice).deposit(1, 1000);
 
       await blockTravel(5);
 
-      expect(await farm.crops.pendingOther(0, user.alice.address)).to.gt(ethers.BigNumber.from("0"));
+      expect(await farm.poseidon.pendingOther(1, user.alice.address)).to.gt(ethers.BigNumber.from("0"));
       expect(await token[a.token].balanceOf(user.alice.address)).to.equal(0);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(0);
 
-      await farm.crops.connect(user.alice).emergencyWithdraw(0);
+      await farm.poseidon.connect(user.alice).emergencyWithdraw(1);
 
-      expect(await farm.crops.pendingOther(0, user.alice.address)).to.equal(0);
+      expect(await farm.poseidon.pendingOther(1, user.alice.address)).to.equal(0);
       expect(await token[a.token].balanceOf(user.alice.address)).to.equal(0);
       expect(await lp[a.token].balanceOf(user.alice.address)).to.equal(1000);
     });

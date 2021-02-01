@@ -145,7 +145,7 @@ contract Poseidon is Ownable, DSMath {
         feeaddr = _devaddr;
         startBlock = _startBlock;
         phase = address(_tidal);
-        add(1, boon, 0, false); // seagod's boon added as pool 0
+        add(0, boon, 0, false); // seagod's boon added as pool 0
     }
 
     // rudimentary checks for the staking adapter
