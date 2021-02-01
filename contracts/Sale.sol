@@ -15,7 +15,7 @@ import "./libraries/UniswapV2Library.sol";
 import "./ds-math/math.sol";
 import "./TideToken.sol";
 
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 contract Sale is Ownable, ReentrancyGuard, DSMath {
 

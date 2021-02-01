@@ -27,7 +27,7 @@ import "./ds-math/math.sol";
 import "./restaking/interfaces/IStakingAdapter.sol";
 import "./interfaces/ITideToken.sol";
 
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 // MasterChef is the master of Sushi. He can make Sushi and he is a fair guy.
 //
