@@ -18,7 +18,6 @@ contract Whitelist is Ownable {
 
   // protectors can be ERC20, ERC777 or ERC1155 tokens
   // ERC115 tokens have a different balanceOf() method, so we use the ERC1820 registry to identify the ERC1155 interface
-  //IERC1820Registry private constant ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
   IERC1820Registry private erc1820Registry; // 0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24
   bytes4 private constant ERC1155_INTERFACE_ID = 0xd9b67a26;
 
@@ -28,7 +27,6 @@ contract Whitelist is Ownable {
   // tokens that offer the holder some kind of protection
   struct TokenAttributes {
     bool active;
-    //uint256 id; // for IERC1155 tokens only
     uint256 proportion; // proportion of incoming tokens used as burn amount (typically 1 or 0.5)
     uint256 floor; // the lowest the balance can be after a wipeout event
   }
@@ -190,12 +188,14 @@ contract Whitelist is Ownable {
     }
   }
 
+  function isUniswapTokenPairWith(address _pair, address _token) public view returns (bool) {
+    return (IUniswapV2Pair(_pair).token0() == _token || IUniswapV2Pair(_pair).token1() == _token);
+  }
 
   function willBurn(address _sender, address _recipient) public view returns (bool) {
     // returns true if everything is false
     return !(whitelist[_sender].sendBurn || whitelist[_recipient].receiveBurn);
   }
-
 
   function willWipeout(address _sender, address _recipient) public view returns (bool) {
     bool whitelisted = whitelist[_sender].sendWipeout || isUniswapTokenPair(_sender);

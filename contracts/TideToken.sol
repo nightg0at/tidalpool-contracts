@@ -53,13 +53,6 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
     parent = ITideParent(_newParent);
   }
   
-  /*
-  function setSibling(address _newSibling) public onlyParent {
-    require(_newSibling != address(0), "TIDE::setSibling: zero address");
-    sibling = ITideToken(_newSibling);
-  }
-  */
-
   function transfer(address _recipient, uint256 _amount) public virtual override returns (bool) {
     uint256 amount = _amount;
     if (parent.willBurn(msg.sender, _recipient)) {
@@ -69,8 +62,12 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.wipeout(_recipient, amount);
       if (parent.isUniswapTokenPair(_recipient)) {
-        _burn(msg.sender, amount);
-        amount = 0;
+        // do not burn if this is a legitimate pair for this token
+        if (!parent.isUniswapTokenPairWith(_recipient, address(this))) {
+          //console.log("burning all due to wipeout on unrelated uniswap pair");
+          _burn(msg.sender, amount);
+          amount = 0;
+        }
       }
     }
     return super.transfer(_recipient, amount);
@@ -85,8 +82,12 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       ITideToken sibling = ITideToken(parent.sibling(address(this)));
       sibling.wipeout(_recipient, amount);
       if (parent.isUniswapTokenPair(_recipient)) {
-        _burn(_sender, amount);
-        amount = 0;
+        // do not burn if this is a legitimate pair for this token
+        if (!parent.isUniswapTokenPairWith(_recipient, address(this))) {
+          //console.log("burning all due to wipeout on unrelated uniswap pair");
+          _burn(_sender, amount);
+          amount = 0;
+        }
       }
     }
     return super.transferFrom(_sender, _recipient, amount);

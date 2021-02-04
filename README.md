@@ -23,7 +23,7 @@ Uniswap pairs
 core
 - **tidal/surf:**
 - **riptide/surf:**
-- **tidal/eth:**
+- **tidal/eth:** 0x3e066FEC3CeA216e3a9224d664B172Ff7f7c22A4
 - **riptide/eth:**
 
 restaking

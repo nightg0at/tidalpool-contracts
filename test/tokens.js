@@ -55,6 +55,7 @@ async function main(provider) {
   await mock.registry.mock.implementsERC165Interface.returns(false);
   await mock.registry.mock.implementsERC165Interface.withArgs(mock.erc1155.address, "0xd9b67a26").returns(true);
   await mock.uniswapPair.mock.factory.returns("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f");
+  await mock.uniswapPair.mock.token0.returns(tidal.address);
   await mock.poseidon.mock.getPhase.returns(tidal.address);
 
   await parent.setAddresses(tidal.address, riptide.address, mock.poseidon.address);
@@ -416,11 +417,30 @@ describe("Tide tokens: transfers", () => {
     expect(await tidal.balanceOf(user.bob.address)).to.equal(9958);
     expect(await riptide.balanceOf(user.alice.address)).to.equal(42);
   });
+
   it("Wipeout with no protection", async () => {
     await tidal.mint(user.alice.address, 20000);
     await riptide.mint(user.bob.address, 10000);
     await tidal.connect(user.alice).transfer(user.bob.address, 10000);
     expect(await riptide.balanceOf(user.bob.address)).to.equal(42);
+  });
+
+  it("Sending to a token/* LP does not burn all incoming tokens", async() => {
+    await tidal.mint(user.alice.address, 10000);
+    expect(await tidal.balanceOf(mock.uniswapPair.address)).to.equal(0);
+    await tidal.connect(user.alice).transfer(mock.uniswapPair.address, 10000);
+    expect(await tidal.balanceOf(mock.uniswapPair.address)).to.equal(9958); // just the transfer fee
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);
+  });
+
+  it("Sending to an unrelated LP triggers wipeout and burns all incoming tokens", async () => {
+    await mock.uniswapPair.mock.token0.returns(user.bob.address);
+    await mock.uniswapPair.mock.token1.returns(user.carol.address);
+    await tidal.mint(user.alice.address, 10000);
+    expect(await tidal.balanceOf(mock.uniswapPair.address)).to.equal(0);
+    await tidal.connect(user.alice).transfer(mock.uniswapPair.address, 10000);
+    expect(await tidal.balanceOf(mock.uniswapPair.address)).to.equal(0);
+    expect(await tidal.balanceOf(user.alice.address)).to.equal(0);    
   });
 
   it("Wipeout protection: surfboard", async () => {
@@ -797,7 +817,7 @@ describe("Tide tokens: transfers", () => {
 
   it("Wipeout protection: uniswap token pair", async () => {
     // uniswap pairs are gold trident + surfboard holders
-    // + all incoming attacking tokens are destroyed
+    // + all incoming attacking tokens are destroyed for unrelated LPs
     const p = {
       txAmount: "1000000000000000000",
       feeMultiplier: 0.0042,
@@ -806,6 +826,8 @@ describe("Tide tokens: transfers", () => {
     };
     await tidal.mint(user.alice.address, "2000000000000000000");
     await riptide.mint(mock.uniswapPair.address, "5000000000000000000");
+    await mock.uniswapPair.mock.token0.returns(riptide.address);
+    await mock.uniswapPair.mock.token1.returns(user.carol.address);
     await tidal.connect(user.alice).transfer(mock.uniswapPair.address, p.txAmount);
     const resultantRiptide = 5000000000000000000 - ((p.txAmount - (p.txAmount * p.feeMultiplier)) * p.proportion);
     expect(await riptide.balanceOf(mock.uniswapPair.address)).to.equal(resultantRiptide.toString());
