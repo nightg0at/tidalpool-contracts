@@ -43,13 +43,14 @@ Farming pools
 
 | pid | pair | allocPoint | fee | restaking |
 |-----|------|------------|-----|-----------|
-| 0 | tidal/surf | 100 | 0 | 0 |
-| 1 | riptide/surf | 100 | 0 | 0 |
-| 2 | tidal/eth | 100 | 0 | 0 |
-| 3 | riptide/eth | 100 | 0 | 0 |
-| 4 | pickle/eth | 100 | 0 | 1 |
-| 5 | farm/eth | 100 | 0 | 1 |
-| 6 | tidal/farm | 100 | 0 | 0 |
-| 7 | tidal/pickle | 100 | 0 | 0 |
-| 8 | riptide/farm | 100 | 0 | 0 |
-| 9 | riptide/pickle | 100 | 0 | 0 |
+| 0 | boon | 100 | 0 | 0 |
+| 1 | tidal/surf | 100 | 0 | 0 |
+| 2 | riptide/surf | 100 | 0 | 0 |
+| 3 | tidal/eth | 100 | 0 | 0 |
+| 4 | riptide/eth | 100 | 0 | 0 |
+| 5 | pickle/eth | 100 | 0 | 1 |
+| 6 | farm/eth | 100 | 0 | 1 |
+| 7 | tidal/farm | 100 | 0 | 0 |
+| 8 | tidal/pickle | 100 | 0 | 0 |
+| 9 | riptide/farm | 100 | 0 | 0 |
+| 10 | riptide/pickle | 100 | 0 | 0 |
