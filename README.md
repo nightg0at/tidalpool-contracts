@@ -9,8 +9,8 @@ App
 - **Boon:** 0x6663cc5a52a2592df4ef801563e5bb14c7c3b7a2
 - **Sale:** 0xc551a8085dc24740883d4886cb0c1e1c160d5883
 - **Poseidon:** 0x80968d968122de461e349d89a8a10f2294a335f1
-- **PickleAdapter:**
-- **HarvestAdapter:**
+- **PickleAdapter:** 0xF1bCEa553eCF3FCF15F99921c08983801769186a
+- **HarvestAdapter:** 0xBE39576dbdd8db484A6E14B4Fa8D9556696F1EAb
 
 Dummies
 - **surf token:** 0x9a70cd6b088706d560a35b90d661bf73dd529f7f
@@ -19,7 +19,9 @@ Dummies
 - **farm token:** 0x43ea2c3b50ed17a4736bed495b5d020d09dbd76c
 - **farm staking:** 0x13ecf40ed56de623af077edf48d8f76a931252a1
 
+
 Uniswap pairs
+
 core
 - **tidal/surf:** 0x565486271bfb381775a4cba11bbeeaa93c7eba32
 - **riptide/surf:** 0x84c241beeaa2e4d5e366fbfb642529e543c44090
@@ -35,3 +37,19 @@ growth
 - **tidal/pickle:** 0xac6f8e6639f5ecb91e00bd50adf9f74a8c3c4256
 - **riptide/farm:** 0xe0efad7a8fa56ae8e9fd879e49a2b46ff9bc8d70
 - **riptide/pickle:** 0xc97e790a63495659df89bb5493b24ac828017bf5
+
+
+Farming pools
+
+| pid | pair | allocPoint | fee | restaking |
+|-----|------|------------|-----|-----------|
+| 0 | tidal/surf | 100 | 0 | 0 |
+| 1 | riptide/surf | 100 | 0 | 0 |
+| 2 | tidal/eth | 100 | 0 | 0 |
+| 3 | riptide/eth | 100 | 0 | 0 |
+| 4 | pickle/eth | 100 | 0 | 1 |
+| 5 | farm/eth | 100 | 0 | 1 |
+| 6 | tidal/farm | 100 | 0 | 0 |
+| 7 | tidal/pickle | 100 | 0 | 0 |
+| 8 | riptide/farm | 100 | 0 | 0 |
+| 9 | riptide/pickle | 100 | 0 | 0 |
