@@ -21,15 +21,17 @@ Dummies
 
 Uniswap pairs
 core
-- **tidal/surf:**
-- **riptide/surf:**
-- **tidal/eth:** 0x3e066FEC3CeA216e3a9224d664B172Ff7f7c22A4
-- **riptide/eth:**
+- **tidal/surf:** 0x565486271bfb381775a4cba11bbeeaa93c7eba32
+- **riptide/surf:** 0x84c241beeaa2e4d5e366fbfb642529e543c44090
+- **tidal/eth:** 0x588333a7b374f002ebdd2a57a625630fd29f3031
+- **riptide/eth:** 0x3b47cbdb9e71ac7680965e6a72e826944b8bc6e1
 
 restaking
 - **pickle/eth:** 0x36578f03e2dac9de69185d3c43cc348d26b23583
 - **farm/eth:** 0x5ea1459a9ad3746c73c36a77016fbcb561fadc07
 
 growth
-- **tidal/farm:**
-- **tidal/pickle:**
+- **tidal/farm:** 0x18c25ec030f21dac0f24f9bcbb99568552bcaf38
+- **tidal/pickle:** 0xac6f8e6639f5ecb91e00bd50adf9f74a8c3c4256
+- **riptide/farm:** 0xe0efad7a8fa56ae8e9fd879e49a2b46ff9bc8d70
+- **riptide/pickle:** 0xc97e790a63495659df89bb5493b24ac828017bf5
