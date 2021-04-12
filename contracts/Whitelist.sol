@@ -59,12 +59,13 @@ contract Whitelist is Ownable {
     IERC1820Registry _erc1820Registry
   ) public {
     erc1820Registry = _erc1820Registry;
-    /*
-    addProtector(0x00, 0, , 5e17, 0); // surfboard
-    addProtector(0x00, 123, , 1e18, 2496e14); // bronze trident 0.2496 floor
-    addProtector(0x00, 456, , 1e18, 42e16); // silver trident 0.42 floor
-    addProtector(0x00, 789, , 1e18, 69e16); // gold trident 0.69 floor
-    */
+    
+    // premine our starting protectors. Surfboards and trident NFTs
+    addProtector(0xf90AeeF57Ae8Bc85FE8d40a3f4a45042F4258c67, 0, 5e17, 0); // surfboard, 0.5x, 0 floor
+    addProtector(0xd07dc4262BCDbf85190C01c996b4C06a461d2430, 78947, 1e18, 2496e14); // bronze trident , 1x, 0.2496 floor
+    addProtector(0xd07dc4262BCDbf85190C01c996b4C06a461d2430, 78955, 1e18, 42e16); // silver trident, 1x, 0.42 floor
+    addProtector(0xd07dc4262BCDbf85190C01c996b4C06a461d2430, 78963, 1e18, 69e16); // gold trident, 1x, 0.69 floor
+
   }
 
   mapping (address => AddressAttributes) public protectedAddress;
