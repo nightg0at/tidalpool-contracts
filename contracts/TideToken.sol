@@ -15,8 +15,6 @@ import "./interfaces/ITideToken.sol";
 import "./interfaces/ITideParent.sol";
 import "./interfaces/IPoseidon.sol";
 
-//import "hardhat/console.sol";
-
 contract TideToken is ERC20Burnable, Ownable, DSMath {
   ITideParent public parent;
 
@@ -64,7 +62,6 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       if (parent.isUniswapTokenPair(_recipient)) {
         // do not burn if this is a legitimate pair for this token
         if (!parent.isUniswapTokenPairWith(_recipient, address(this))) {
-          //console.log("burning all due to wipeout on unrelated uniswap pair");
           _burn(msg.sender, amount);
           amount = 0;
         }
@@ -84,7 +81,6 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
       if (parent.isUniswapTokenPair(_recipient)) {
         // do not burn if this is a legitimate pair for this token
         if (!parent.isUniswapTokenPairWith(_recipient, address(this))) {
-          //console.log("burning all due to wipeout on unrelated uniswap pair");
           _burn(_sender, amount);
           amount = 0;
         }
@@ -109,15 +105,6 @@ contract TideToken is ERC20Burnable, Ownable, DSMath {
     // return the new amount after burning
     return sub(_amount, burnAmount);
   }
-
-  /*
-  // do we need this?
-  //   only if poseidon burns some tokens for some reason
-  //   perhaps have a burn own balance function?
-  function burn(address account, uint256 amount) public onlyOwner {
-    _burn(account, amount);
-  }
-  */
 
   function mint(address _to, uint256 _amount) public onlyMinter { 
     _mint(_to, _amount);

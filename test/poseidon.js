@@ -433,7 +433,7 @@ describe("Withdraw", () => {
     await poseidon.add(1, generic[0].address, 0, false);
     await poseidon.deposit(1, 100);
     blockTo(50);
-    expect(await tidal.balanceOf(owner.address)).to.equal(0);;
+    expect(await tidal.balanceOf(owner.address)).to.equal(0);
     await poseidon.withdraw(1, 100);
     expect(await tidal.balanceOf(owner.address)).to.be.above(0);
   });

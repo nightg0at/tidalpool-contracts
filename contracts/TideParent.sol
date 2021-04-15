@@ -30,7 +30,7 @@ contract TideParent is Whitelist {
     if (protectedAddress[_poseidon].active) {
       setProtectedAddress(_poseidon, false, 0, 0);
     }
-    setProtectedAddress(_newPoseidon, true, 5e17, 69e16); // check
+    setProtectedAddress(_newPoseidon, true, 5e17, 69e16);
     setWhitelist(_newPoseidon, true, true, false, true, false);
     _poseidon = _newPoseidon;
   }

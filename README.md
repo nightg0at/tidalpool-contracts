@@ -3,9 +3,9 @@
 **network:** Kovan
 
 App
-- **TideParent:** 0x8F3Bf6db4cFb964d86035860ed069f2CDE908585
-- **TideToken: Tidal:** 0x9BD1e67F7736fdC86105A3d9e1F920f9C5bA0C0C
-- **TideToken: Riptide:** 0xC39e9EA1426B2EA7de7dD4CA2F278e5E38EEc497
+- **TideParent:** 0x8135f28a2d1e8323250d76e87fcade13833a5772
+- **TideToken: Tidal:** 0xc48cdde99306b5926d5abd815a32d7b13cfcf0bd
+- **TideToken: Riptide:** 0x4aa4e003bfcf0e4f52e1ca3523229a25a6ac5c18
 - **Boon:** 0x6663cc5a52a2592df4ef801563e5bb14c7c3b7a2
 - **Sale:** 0xc551a8085dc24740883d4886cb0c1e1c160d5883
 - **Poseidon:** 0x80968d968122de461e349d89a8a10f2294a335f1

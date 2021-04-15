@@ -27,8 +27,6 @@ import "./ds-math/math.sol";
 import "./restaking/interfaces/IStakingAdapter.sol";
 import "./interfaces/ITideToken.sol";
 
-//import "hardhat/console.sol";
-
 // MasterChef is the master of Sushi. He can make Sushi and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
@@ -82,12 +80,8 @@ contract Poseidon is Ownable, DSMath {
     address public devaddr;
     // Fee address
     address public feeaddr;
-    // Block number when bonus SUSHI period ends.
-    //uint256 public bonusEndBlock;
-    // SUSHI tokens created per block.
+    // Reward tokens created per block.
     uint256 public baseRewardPerBlock = 2496e11; // base reward token emission (0.0002496)
-    // Bonus muliplier for early sushi makers.
-    //uint256 public constant BONUS_MULTIPLIER = 10;
     uint256 public devDivisor = 238; // dev fund of 0.42%, 100/238 = 0.420168...
 
     // Info of each pool.
@@ -106,8 +100,6 @@ contract Poseidon is Ownable, DSMath {
     address public phase;
     uint256 public constant TIDAL_CAP = 69e18;
     uint256 public constant TIDAL_VERTEX = 42e18;
-
-    //uint256 private constant BLOCKS_PER_YEAR = 2336000;
 
     // weather
     bool public stormy = false;
@@ -145,7 +137,6 @@ contract Poseidon is Ownable, DSMath {
         feeaddr = _devaddr;
         startBlock = _startBlock;
         phase = address(_tidal);
-        add(0, boon, 0, false); // seagod's boon added as pool 0
     }
 
     // rudimentary checks for the staking adapter
@@ -377,11 +368,9 @@ contract Poseidon is Ownable, DSMath {
 
         uint256 span = block.number.sub(pool.lastRewardBlock);
         if (phase == address(tidal)) {
-            //console.log("POSEIDON::updatePool(): tidal phase");
             uint256 tidalReward = span.mul(_tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
             uint256 devTidalReward = tidalReward.div(devDivisor);
             if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > TIDAL_CAP) {
-                //console.log("POSEIDON::updatePool(): tidal => riptide switch");
                 // we would exceed the cap
                 uint256 totalTidalReward = TIDAL_CAP.sub(tidal.totalSupply());
                 // split proportionally
@@ -403,14 +392,10 @@ contract Poseidon is Ownable, DSMath {
                 pool.accTidalPerShare = pool.accTidalPerShare.add(tidalReward.mul(1e12).div(lpSupply));
             }
         } else {
-            //console.log("POSEIDON::updatePool(): riptide phase");
             uint256 riptideReward = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
             riptide.mint(devaddr, riptideReward.div(devDivisor));
             riptide.mint(address(this), riptideReward);
             pool.accRiptidePerShare = pool.accRiptidePerShare.add(riptideReward.mul(1e12).div(lpSupply));
-            //console.log("POSEIDON::updatePool():riptideReward: %s", riptideReward);
-            //console.log("POSEIDON::updatePool():pool.accRiptidePerShare: %s", pool.accRiptidePerShare);
-            //console.log("POSEIDON::updatePool():minted %s", riptide.balanceOf(address(this)));
         }
         pool.lastRewardBlock = block.number;
     }
@@ -476,20 +461,14 @@ contract Poseidon is Ownable, DSMath {
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
         uint256 pendingTidal = user.amount.mul(pool.accTidalPerShare).div(1e12).sub(user.tidalRewardDebt);
-        //console.log("POSEIDON:withdraw:pendingTidal: %s", pendingTidal);
         if(pendingTidal > 0) {
             safeTideTransfer(msg.sender, pendingTidal, tidal);
         }
         uint256 pendingRiptide = user.amount.mul(pool.accRiptidePerShare).div(1e12).sub(user.riptideRewardDebt);
-        //console.log(
-        //    "POSEIDON::withdraw:\n\tuser.amount: %s \n\tpool.accRiptidePerShare: %s \n\tuser.riptideRewardDebt: %s",
-        //    user.amount, pool.accRiptidePerShare, user.riptideRewardDebt);
-        //console.log("POSEIDON::withdraw:pendingRiptide: %s", pendingRiptide);
         if(pendingRiptide > 0) {
             safeTideTransfer(msg.sender, pendingRiptide, riptide);
         }
         uint256 pendingOtherTokens = user.amount.mul(pool.accOtherPerShare).div(1e12).sub(user.otherRewardDebt);
-        //console.log("POSEIDON::withdraw:pendingOtherTokens: %s", pendingOtherTokens);
         if(_amount > 0) {
             uint256 amount = _amount;
             user.amount = user.amount.sub(amount);
@@ -516,7 +495,6 @@ contract Poseidon is Ownable, DSMath {
     function processWithdrawFee(address _lpToken, uint256 _fee) private {
         // get token addresses & balances
         address token0 = IUniswapV2Pair(_lpToken).token0();
-
         address token1 = IUniswapV2Pair(_lpToken).token1();
 
         // remove liquidity
@@ -608,9 +586,15 @@ contract Poseidon is Ownable, DSMath {
         }
     }
 
-    // Update dev address by the previous dev.
+    // Update dev fee address
     function dev(address _devaddr) public onlyOwner {
         devaddr = _devaddr;
+    }
+
+    // Set dev fee divisor
+    function setNewDevDivisor(uint256 _newDivisor) public onlyOwner {
+        require(_newDivisor >= 10, "Dev fee too high");
+        devDivisor = _newDivisor;
     }
 
     // Update withdraw fee recipient
@@ -654,19 +638,10 @@ contract Poseidon is Ownable, DSMath {
 
     // called every pool update.
     function updatePhase() internal {
-        //console.log("POSEIDON::updatePhase(): tidal.totalSupply(): %s, TIDAL_CAP: %s, TIDAL_VERTEX: %s", tidal.totalSupply(), TIDAL_CAP, TIDAL_VERTEX);
         if (phase == address(tidal) && tidal.totalSupply() >= TIDAL_CAP){
-            //console.log("POSEIDON::updatePhase(): cap hit");
-            // disable boon airdrop farming after cap is hit
-            if (poolInfo[0].allocPoint > 0) {
-                //console.log("POSEIDON::updatePhase(): disabling boon rewards");
-                poolInfo[0].allocPoint = 0;
-            }
-            //console.log("POSEIDON::updatePhase(): tidal => riptide");
             phase = address(riptide);
         }
         else if (phase == address(riptide) && tidal.totalSupply() < TIDAL_VERTEX) {
-            //console.log("POSEIDON::updatePhase(): riptide => tidal");
             phase = address(tidal);
         }
     }
