@@ -82,7 +82,7 @@ contract Poseidon is Ownable, DSMath {
     address public feeaddr;
     // Reward tokens created per block.
     uint256 public baseRewardPerBlock = 2496e11; // base reward token emission (0.0002496)
-    uint256 public devDivisor = 238; // dev fund of 0.42%, 100/238 = 0.420168...
+    uint256 public devDivisor = 238; // dev fund of 4.2%, 1000/238 = 4.20168...
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -369,19 +369,19 @@ contract Poseidon is Ownable, DSMath {
         uint256 span = block.number.sub(pool.lastRewardBlock);
         if (phase == address(tidal)) {
             uint256 tidalReward = span.mul(_tokensPerBlock(address(tidal))).mul(pool.allocPoint).div(totalAllocPoint);
-            uint256 devTidalReward = tidalReward.div(devDivisor);
+            uint256 devTidalReward = tidalReward.mul(10).div(devDivisor);
             if (tidal.totalSupply().add(tidalReward).add(devTidalReward) > TIDAL_CAP) {
                 // we would exceed the cap
                 uint256 totalTidalReward = TIDAL_CAP.sub(tidal.totalSupply());
                 // split proportionally
-                uint256 newDevTidalReward = totalTidalReward.div(devDivisor-1); // ~ reverse percentage approximation
+                uint256 newDevTidalReward = totalTidalReward.mul(10).div(devDivisor-10); // ~ reverse percentage approximation
                 uint256 newTidalReward = totalTidalReward.sub(newDevTidalReward);
                 tidal.mint(devaddr, newDevTidalReward); 
                 tidal.mint(address(this), newTidalReward);
                 pool.accTidalPerShare = pool.accTidalPerShare.add(newTidalReward.mul(1e12).div(lpSupply));
 
                 uint256 totalRiptideReward = tidalReward.sub(totalTidalReward);
-                uint256 newDevRiptideReward = totalRiptideReward.div(devDivisor-1);
+                uint256 newDevRiptideReward = totalRiptideReward.mul(10).div(devDivisor-10);
                 uint256 newRiptideReward = totalRiptideReward.sub(newDevRiptideReward);
                 riptide.mint(devaddr, newDevRiptideReward);
                 riptide.mint(devaddr, newRiptideReward);
@@ -393,7 +393,7 @@ contract Poseidon is Ownable, DSMath {
             }
         } else {
             uint256 riptideReward = span.mul(_tokensPerBlock(address(riptide))).mul(pool.allocPoint).div(totalAllocPoint);
-            riptide.mint(devaddr, riptideReward.div(devDivisor));
+            riptide.mint(devaddr, riptideReward.mul(10).div(devDivisor));
             riptide.mint(address(this), riptideReward);
             pool.accRiptidePerShare = pool.accRiptidePerShare.add(riptideReward.mul(1e12).div(lpSupply));
         }
@@ -593,7 +593,7 @@ contract Poseidon is Ownable, DSMath {
 
     // Set dev fee divisor
     function setNewDevDivisor(uint256 _newDivisor) public onlyOwner {
-        require(_newDivisor >= 10, "Dev fee too high");
+        require(_newDivisor >= 145, "Dev fee too high"); // ~6.9% max
         devDivisor = _newDivisor;
     }
 
