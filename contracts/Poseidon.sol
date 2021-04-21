@@ -74,7 +74,6 @@ contract Poseidon is Ownable, DSMath {
 
     ITideToken public tidal;
     ITideToken public riptide;
-    IERC20 public boon;
 
     // Dev address.
     address public devaddr;
@@ -118,10 +117,9 @@ contract Poseidon is Ownable, DSMath {
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
-        IUniswapV2Router02 _router,
+        IUniswapV2Router02 _router, // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D 
         ITideToken _tidal,
         ITideToken _riptide,
-        IERC20 _boon,
         address _surf, // 0xEa319e87Cf06203DAe107Dd8E5672175e3Ee976c
         address _whirlpool, // 0x999b1e6EDCb412b59ECF0C5e14c20948Ce81F40b
         address _devaddr,
@@ -130,7 +128,6 @@ contract Poseidon is Ownable, DSMath {
         router = _router;
         tidal = _tidal;
         riptide = _riptide;
-        boon = _boon;
         surf = _surf;
         whirlpool = _whirlpool;
         devaddr = _devaddr;

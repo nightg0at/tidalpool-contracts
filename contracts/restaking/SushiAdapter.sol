@@ -1,5 +1,5 @@
 /*
-  Rottenswap adapter
+  Sushiswap adapter
 
   @nightg0at
   SPDX-License-Identifier: MIT
@@ -10,7 +10,7 @@ pragma solidity 0.6.12;
 import "./interfaces/IMasterChef.sol";
 import "./MasterChefAdapter.sol";
 
-contract RottenAdapter is MasterChefAdapter {
+contract SushiAdapter is MasterChefAdapter {
 
   constructor(
     IMasterChef _target,

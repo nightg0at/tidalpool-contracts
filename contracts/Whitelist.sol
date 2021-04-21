@@ -135,7 +135,7 @@ contract Whitelist is Ownable {
   }
 
   function setProtectedAddress(address _addr, bool _active, uint256 _proportion, uint256 _floor) public onlyOwner {
-    require(_addr != address(0), "WIPEOUT::editProtector: zero address");
+    require(_addr != address(0), "WIPEOUT::setProtector: zero address");
     protectedAddress[_addr] = AddressAttributes(_active, _proportion, _floor);
   }
 
@@ -155,7 +155,7 @@ contract Whitelist is Ownable {
     bool _sendWipeout,
     bool _receiveWipeout
   ) public onlyOwner {
-    require(_whitelisted != address(0), "WIPEOUT::editWhitelist: zero address");
+    require(_whitelisted != address(0), "WIPEOUT::setWhitelist: zero address");
     whitelist[_whitelisted] = WhitelistAttributes(_active, _sendBurn, _receiveBurn, _sendWipeout, _receiveWipeout);
   }
 
@@ -170,7 +170,7 @@ contract Whitelist is Ownable {
   }
 
   // checks if the address is a deployed contract and if so,
-  // checks if the factory() method is present.
+  // checks if the factory() method is present and returns the uniswap factory address.
   // returns true if it is.
   // This is easy to spoof but the gains are low enough for this to be ok.
   function isUniswapTokenPair(address _addr) public view returns (bool) {
