@@ -22,7 +22,7 @@ core
 - **riptide/eth:** [0xa7e9b4eE8d112231654e950b02Bbdc3aB78CD62c](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
 
 restaking
-- **sushi/eth:** [0x795065dCc9f64b5614C407a6EFDC400DA6221FB0](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
+- **sushi/eth SLP:** [0x795065dCc9f64b5614C407a6EFDC400DA6221FB0](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
 - **pickle/eth:** [0xdc98556Ce24f007A5eF6dC1CE96322d65832A819](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
 - **farm/eth:** [0x56feaccb7f750b997b36a68625c7c596f0b41a58](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
 - **rot/eth:** [0x5A265315520696299fa1EcE0701c3a1BA961b888](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
@@ -32,17 +32,14 @@ Farming pools
 
 | pid | pair | allocPoint | fee | restaking |
 |-----|------|------------|-----|-----------|
-| 0 | boon | 100 | 0 | 0 |
-| 1 | tidal/surf | 100 | 0 | 0 |
-| 2 | riptide/surf | 100 | 0 | 0 |
-| 3 | tidal/eth | 100 | 0 | 0 |
-| 4 | riptide/eth | 100 | 0 | 0 |
-| 5 | pickle/eth | 100 | 0 | 1 |
-| 6 | farm/eth | 100 | 0 | 1 |
-| 7 | tidal/farm | 100 | 0 | 0 |
-| 8 | tidal/pickle | 100 | 0 | 0 |
-| 9 | riptide/farm | 100 | 0 | 0 |
-| 10 | riptide/pickle | 100 | 0 | 0 |
+| 0 | tidal/eth | 100 | 0 | 0 |
+| 1 | riptide/eth | 100 | 0 | 0 |
+| 2 | sushi/eth | 50 | 0 | 1 |
+| 3 | pickle/eth | 50 | 0 | 1 |
+| 4 | farm/eth | 50 | 0 | 1 |
+| 5 | rot/eth | 50 | 0 | 1 |
+| 6 | tidal/surf | 100 | 10 | 0 |
+| 7 | riptide/surf | 100 | 10 | 0 |
 
 
 **network:** Kovan
