@@ -4,28 +4,28 @@
 
 App
 - **TideParent:** [0x21C1ADBbf9B7059b60329ceDB2E375a585f35405](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **TideToken: Tidal:** [0xE385a77a06fFBd4616f3DB530eF524724DF9230f](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **TideToken: Riptide:** [0x83448c8E9C643854f827406A76b346134Ce547c3](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **Poseidon:** [0x86d747c5a27b3BbD7fE5f63F212bC1c751F96f71](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **SushiAdapter:** [0x742082ab4319e9AcF7999576958a6FE413F931eD](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **PickleAdapter:** [0x895E806aE956A82529347F177e321F8414B3D133](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **HarvestAdapter:** [0x7Cc3719D1d376265734290CB64253a4DD2dd512f](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **RottenAdapter:** [0x1b84995a53dEd4Ab7a77a615D48148E59EdBAef8](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
+- **TideToken: Tidal:** [0xE385a77a06fFBd4616f3DB530eF524724DF9230f](https://etherscan.io/address/0xE385a77a06fFBd4616f3DB530eF524724DF9230f)
+- **TideToken: Riptide:** [0x83448c8E9C643854f827406A76b346134Ce547c3](https://etherscan.io/address/0x83448c8E9C643854f827406A76b346134Ce547c3)
+- **Poseidon:** [0x86d747c5a27b3BbD7fE5f63F212bC1c751F96f71](https://etherscan.io/address/0x86d747c5a27b3BbD7fE5f63F212bC1c751F96f71)
+- **SushiAdapter:** [0x742082ab4319e9AcF7999576958a6FE413F931eD](https://etherscan.io/address/0x742082ab4319e9AcF7999576958a6FE413F931eD)
+- **PickleAdapter:** [0x895E806aE956A82529347F177e321F8414B3D133](https://etherscan.io/address/0x895E806aE956A82529347F177e321F8414B3D133)
+- **HarvestAdapter:** [0x7Cc3719D1d376265734290CB64253a4DD2dd512f](https://etherscan.io/address/0x7Cc3719D1d376265734290CB64253a4DD2dd512f)
+- **RottenAdapter:** [0x1b84995a53dEd4Ab7a77a615D48148E59EdBAef8](https://etherscan.io/address/0x1b84995a53dEd4Ab7a77a615D48148E59EdBAef8)
 
 
 Uniswap pairs
 
 core
-- **tidal/surf:** [0x7B5bb636A604a4013E973a8c3a017c06fAA600AA](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **riptide/surf:** [0xCD44786F833C65D21bb2976A583F17E5cAE5C4e0](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **tidal/eth:** [0x733b7D25C2741c201F60BBC75f7cBa382886E5e7](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **riptide/eth:** [0xa7e9b4eE8d112231654e950b02Bbdc3aB78CD62c](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
+- **tidal/surf:** [0x7B5bb636A604a4013E973a8c3a017c06fAA600AA](https://etherscan.io/address/0x7B5bb636A604a4013E973a8c3a017c06fAA600AA)
+- **riptide/surf:** [0xCD44786F833C65D21bb2976A583F17E5cAE5C4e0](https://etherscan.io/address/0xCD44786F833C65D21bb2976A583F17E5cAE5C4e0)
+- **tidal/eth:** [0x733b7D25C2741c201F60BBC75f7cBa382886E5e7](https://etherscan.io/address/0x733b7D25C2741c201F60BBC75f7cBa382886E5e7)
+- **riptide/eth:** [0xa7e9b4eE8d112231654e950b02Bbdc3aB78CD62c](https://etherscan.io/address/0xa7e9b4eE8d112231654e950b02Bbdc3aB78CD62c)
 
 restaking
-- **sushi/eth SLP:** [0x795065dCc9f64b5614C407a6EFDC400DA6221FB0](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **pickle/eth:** [0xdc98556Ce24f007A5eF6dC1CE96322d65832A819](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **farm/eth:** [0x56feaccb7f750b997b36a68625c7c596f0b41a58](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
-- **rot/eth:** [0x5A265315520696299fa1EcE0701c3a1BA961b888](https://etherscan.io/address/0x21C1ADBbf9B7059b60329ceDB2E375a585f35405)
+- **sushi/eth SLP:** [0x795065dCc9f64b5614C407a6EFDC400DA6221FB0](https://etherscan.io/address/0x795065dCc9f64b5614C407a6EFDC400DA6221FB0)
+- **pickle/eth:** [0xdc98556Ce24f007A5eF6dC1CE96322d65832A819](https://etherscan.io/address/0xdc98556Ce24f007A5eF6dC1CE96322d65832A819)
+- **farm/eth:** [0x56feaccb7f750b997b36a68625c7c596f0b41a58](https://etherscan.io/address/0x56feaccb7f750b997b36a68625c7c596f0b41a58)
+- **rot/eth:** [0x5A265315520696299fa1EcE0701c3a1BA961b888](https://etherscan.io/address/0x5A265315520696299fa1EcE0701c3a1BA961b888)
 
 
 Farming pools
